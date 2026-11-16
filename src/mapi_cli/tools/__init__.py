@@ -60,7 +60,7 @@ def cmd_validate(
         Path("data"), "--data-dir", "-d", help="Directory containing compiled service data"
     ),
     registry_path: Path = typer.Option(
-        Path("services.json"), "--registry", "-r", help="Path to services.json"
+        Path("mapi-registry.json"), "--registry", "-r", help="Path to mapi-registry.json"
     ),
 ) -> None:
     """Validate data directory consistency, schemas, and $ref integrity."""
@@ -93,10 +93,10 @@ def cmd_registry_build(
         Path("data"), "--data-dir", "-d", help="Directory containing service metadata"
     ),
     out: Path = typer.Option(
-        Path("services.json"), "--out", "-o", help="Target services.json path"
+        Path("mapi-registry.json"), "--out", "-o", help="Target mapi-registry.json path"
     ),
 ) -> None:
-    """Compile services.json registry from metadata files on disk."""
+    """Compile mapi-registry.json registry from metadata files on disk."""
     builder = RegistryBuilder(data_dir=data_dir, registry_path=out)
     reg = builder.build_registry()
     builder.save_registry(reg)

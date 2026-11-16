@@ -63,7 +63,7 @@ def test_cli_compiler_and_sdk_loader_contract(tmp_path: Path):
             }
         },
     )
-    reg_file = tmp_path / "services.json"
+    reg_file = tmp_path / "mapi-registry.json"
     reg_file.write_bytes(msgspec.json.encode(reg))
 
     # 3. Read using SDK DiskLoader

@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 class RegistryBuilder:
-    """Builds services.json from disk metadata files across provider directories."""
+    """Builds mapi-registry.json from disk metadata files across provider directories."""
 
     def __init__(self, data_dir: Path, registry_path: Path) -> None:
         self.data_dir = data_dir

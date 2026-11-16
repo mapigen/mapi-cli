@@ -7,6 +7,7 @@ from mapi.models.domain import Parameter, ParameterRef, ServiceData
 from mapi.registry.discovery import DiscoveryService, RegistryManager
 from mapi.registry.loader import DiskLoader
 
+from mapi_cli.paths import resolve_registry_path
 from mapi_cli.tools.models import ValidationResult
 
 log = logging.getLogger(__name__)
@@ -36,16 +37,28 @@ def validate_operations_and_refs(data: ServiceData, service_name: str) -> list[s
     return errors
 
 
-def validate_data_directory(data_dir: Path, registry_path: Path) -> ValidationResult:
+def validate_data_directory(
+    data_dir: Path, registry_path: Path | None = None
+) -> ValidationResult:
     """Validate all services and component references in the data directory."""
-    loader = DiskLoader(data_dir=data_dir, registry_path=registry_path)
+    effective_reg_path = (
+        registry_path if registry_path is not None else resolve_registry_path(data_dir=data_dir)[0]
+    )
+
+    # If specified registry path doesn't exist, try resolving via fallback
+    if not effective_reg_path.exists():
+        fallback_path, _ = resolve_registry_path(data_dir=data_dir)
+        if fallback_path.exists():
+            effective_reg_path = fallback_path
+
+    loader = DiskLoader(data_dir=data_dir, registry_path=effective_reg_path)
     rm = RegistryManager(loader)
     discovery = DiscoveryService(rm, loader)
 
     try:
         providers = discovery.list_providers()
     except Exception as e:
-        log.warning("No service registry found at %s: %s", registry_path, e)
+        log.warning("No service registry found at %s: %s", effective_reg_path, e)
         return ValidationResult(total_services=0, valid_services=0)
 
     total = 0

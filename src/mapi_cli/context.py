@@ -6,6 +6,8 @@ from pathlib import Path
 from mapi import Mapi
 from mapi.models.config import ClientConfig
 
+from mapi_cli.paths import resolve_data_dir
+
 
 @dataclass
 class CliContext:
@@ -22,6 +24,7 @@ class CliContext:
     def client(self) -> Mapi:
         """Lazily instantiate the Mapi SDK client so --help and completion stay fast."""
         if self._client is None:
+            effective_dir, _ = resolve_data_dir(self.data_dir)
             cfg = ClientConfig(base_url=self.base_url, default_timeout=self.timeout)
-            self._client = Mapi(config=cfg, data_dir=self.data_dir)
+            self._client = Mapi(config=cfg, data_dir=effective_dir)
         return self._client
