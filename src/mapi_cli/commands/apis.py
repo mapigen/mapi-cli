@@ -5,6 +5,7 @@ import typer
 from mapi_cli.completion import complete_provider
 from mapi_cli.context import CliContext
 from mapi_cli.output import emit_output
+from mapi_cli.resolution import resolve_provider_name
 from mapi_cli.ui.tables import build_apis_table
 
 
@@ -17,6 +18,8 @@ def list_apis(
     """List all APIs available for a given provider."""
     c_ctx: CliContext = ctx.obj
     client = c_ctx.client
+
+    provider = resolve_provider_name(client.discovery, provider)
 
     if not client.discovery.provider_exists(provider):
         from mapi.exceptions import ServiceNotFoundError

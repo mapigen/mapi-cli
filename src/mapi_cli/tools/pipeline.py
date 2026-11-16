@@ -5,6 +5,7 @@ from pathlib import Path
 
 import msgspec
 
+from mapi_cli.paths import MAPI_EXT_ZST
 from mapi_cli.tools.converter import normalize_spec
 from mapi_cli.tools.extractor import extract_service_data
 from mapi_cli.tools.models import CompileConfig, CompileMetrics, SpecSourceConfig
@@ -38,7 +39,7 @@ def process_service(
         out_service_dir = data_dir / provider / source / api
         out_service_dir.mkdir(parents=True, exist_ok=True)
 
-        target_file = out_service_dir / f"{api}.utilize.json.zst"
+        target_file = out_service_dir / f"{api}{MAPI_EXT_ZST}"
         target_file.write_bytes(compressed)
 
         return CompileMetrics(
@@ -50,6 +51,7 @@ def process_service(
             reusable_param_count=len(service_data.components.parameters),
             parse_duration=parse_dur,
             extract_duration=extract_dur,
+            mapi_path=str(target_file),
             utilize_path=str(target_file),
         )
     except Exception as e:

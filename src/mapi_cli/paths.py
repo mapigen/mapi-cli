@@ -9,9 +9,14 @@ import platformdirs
 
 from mapi_cli.config import get_config_value
 
-PRIMARY_REGISTRY_FILENAME = "mapi-registry.json"
-LEGACY_REGISTRY_FILENAME = "services.json"
-DEFAULT_DATA_DIR_NAME = "data"
+PRIMARY_REGISTRY_FILENAME: str = "mapi-registry.json"
+LEGACY_REGISTRY_FILENAME: str = "services.json"
+DEFAULT_DATA_DIR_NAME: str = "data"
+
+MAPI_EXT_JSON: str = ".mapi.json"
+MAPI_EXT_ZST: str = ".mapi.json.zst"
+MAPI_EXT_MSGPACK: str = ".mapi.msgpack"
+MAPI_EXT_MSGPACK_ZST: str = ".mapi.msgpack.zst"
 
 
 def find_installed_mapi_sdk() -> tuple[bool, str | None, Path | None]:
@@ -83,12 +88,7 @@ def auto_discover_candidates() -> list[dict[str, Any]]:
     if env_dir:
         add_candidate(Path(env_dir), "Environment (MAPI_DATA_DIR)")
 
-    # 2. Persisted user configuration
-    cfg_dir = get_config_value("data_dir")
-    if cfg_dir:
-        add_candidate(Path(cfg_dir), "User Config (~/.config/mapi)")
-
-    # 3. Check CWD and walk up parents
+    # 2. Check CWD and walk up parents (Local Workspace takes precedence over global config)
     current = Path.cwd().resolve()
     for parent in [current, *current.parents[:4]]:
         data_sub = parent / DEFAULT_DATA_DIR_NAME
@@ -98,12 +98,17 @@ def auto_discover_candidates() -> list[dict[str, Any]]:
         if reg:
             add_candidate(parent, f"Local Workspace ({parent.name})")
 
-    # 4. Check installed mapi package
+    # 3. Check installed mapi package
     installed, _, pkg_path = find_installed_mapi_sdk()
     if installed and pkg_path:
         pkg_data = pkg_path / DEFAULT_DATA_DIR_NAME
         if pkg_data.is_dir():
             add_candidate(pkg_data, "Installed MAPI Package")
+
+    # 4. Persisted user configuration (~/.config/mapi)
+    cfg_dir = get_config_value("data_dir")
+    if cfg_dir:
+        add_candidate(Path(cfg_dir), "User Config (~/.config/mapi)")
 
     # 5. System user data dir
     user_data = get_system_user_data_dir()
@@ -114,7 +119,7 @@ def auto_discover_candidates() -> list[dict[str, Any]]:
 
 
 def resolve_data_dir(explicit: Path | None = None) -> tuple[Path, str]:
-    """Resolve data directory using precedence: Explicit > ENV > Config > Auto-discovery > Fallback."""
+    """Resolve data directory using precedence: Explicit > ENV > Explicit User Config > Auto-discovery > Fallback."""
     if explicit is not None:
         return explicit, "cli_argument"
 
@@ -128,7 +133,7 @@ def resolve_data_dir(explicit: Path | None = None) -> tuple[Path, str]:
         if p.exists():
             return p, "user_config"
 
-    # Auto-discovery
+    # Auto-discovery (Local Workspace & Installed Package first, before System Fallback)
     for candidate in auto_discover_candidates():
         if (
             candidate["exists"]
@@ -136,6 +141,10 @@ def resolve_data_dir(explicit: Path | None = None) -> tuple[Path, str]:
             and (candidate["registry_file"] or any(candidate["path"].iterdir()))
         ):
             return candidate["path"], candidate["source"]
+
+    user_data = get_system_user_data_dir()
+    if user_data.exists():
+        return user_data, "system_user_data"
 
     return Path(DEFAULT_DATA_DIR_NAME), "default_fallback"
 

@@ -5,6 +5,7 @@ import typer
 from mapi_cli.completion import complete_api, complete_provider
 from mapi_cli.context import CliContext
 from mapi_cli.output import emit_output
+from mapi_cli.resolution import resolve_provider_and_api
 from mapi_cli.ui.tables import build_operations_table
 
 
@@ -20,6 +21,8 @@ def list_operations(
     """List operations available for a given provider and API."""
     c_ctx: CliContext = ctx.obj
     client = c_ctx.client
+
+    provider, api = resolve_provider_and_api(client.discovery, provider, api)
 
     if not client.discovery.provider_exists(provider):
         from mapi.exceptions import ServiceNotFoundError

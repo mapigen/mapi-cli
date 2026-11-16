@@ -10,9 +10,15 @@ from mapi import ApiKeyAuth, BearerAuth
 from mapi.models.request import RequestConfig
 from mapi.models.response import MapiResult
 
-from mapi_cli.completion import complete_api, complete_operation, complete_provider
+from mapi_cli.completion import (
+    complete_api,
+    complete_call_parameters,
+    complete_operation,
+    complete_target_or_provider,
+)
 from mapi_cli.context import CliContext
 from mapi_cli.output import emit_output
+from mapi_cli.resolution import resolve_provider_and_api
 from mapi_cli.ui.console import console
 from mapi_cli.ui.panels import build_dry_run_panel
 
@@ -27,11 +33,25 @@ def _parse_param_value(val: str) -> Any:
 
 def execute_call(
     ctx: typer.Context,
-    provider: str = typer.Argument(..., help="Provider name", autocompletion=complete_provider),
-    api: str = typer.Argument(..., help="API name", autocompletion=complete_api),
-    operation: str = typer.Argument(..., help="Operation ID", autocompletion=complete_operation),
+    target: str = typer.Argument(
+        ...,
+        help="Provider or composite path 'provider/api/operation'",
+        autocompletion=complete_target_or_provider,
+    ),
+    api: str | None = typer.Argument(
+        None,
+        help="API name (optional if composite path is used)",
+        autocompletion=complete_api,
+    ),
+    operation: str | None = typer.Argument(
+        None,
+        help="Operation ID (optional if composite path is used)",
+        autocompletion=complete_operation,
+    ),
     params: list[str] = typer.Argument(
-        None, help="Key=value parameters (e.g. id=123 limit=10 status=active)"
+        None,
+        help="Key=value parameters (e.g. id=123 limit=10 status=active)",
+        autocompletion=complete_call_parameters,
     ),
     source: str | None = typer.Option(None, "--source", "-s", help="Specific spec source"),
     data: str | None = typer.Option(
@@ -50,19 +70,56 @@ def execute_call(
         None, "--auth-env", help="Environment variable name holding auth token"
     ),
 ) -> None:
-    """Execute an API operation directly from the command line."""
+    """Execute an API operation directly from the command line.
+
+    Examples:
+        mapi call pokeapi/REST/pokemon_retrieve id=ditto
+        mapi call pokeapi REST pokemon_retrieve id=ditto
+    """
     c_ctx: CliContext = ctx.obj
     client = c_ctx.client
 
+    # Parse target and parameters
+    actual_params = list(params) if params else []
+    if "/" in target:
+        parts = target.strip("/").split("/")
+        if len(parts) >= 3:
+            resolved_provider = parts[0]
+            resolved_api = parts[1]
+            resolved_operation = parts[2]
+            leftovers = [x for x in (api, operation) if x is not None]
+            actual_params = leftovers + actual_params
+        elif len(parts) == 2 and operation:
+            resolved_provider = parts[0]
+            resolved_api = parts[1]
+            resolved_operation = operation
+            if api is not None:
+                actual_params = [api] + actual_params
+        else:
+            raise typer.BadParameter(
+                "Invalid composite path. Expected format: 'provider/api/operation' (e.g. pokeapi/REST/pokemon_retrieve)"
+            )
+    else:
+        if not api or not operation:
+            raise typer.BadParameter(
+                "Missing API or Operation ID. Provide 'provider/api/operation' or separate arguments."
+            )
+        resolved_provider = target
+        resolved_api = api
+        resolved_operation = operation
+
+    resolved_provider, resolved_api = resolve_provider_and_api(
+        client.discovery, resolved_provider, resolved_api
+    )
+
     # Parse key=value arguments
     kwargs: dict[str, Any] = {}
-    if params:
-        for p in params:
-            if "=" in p:
-                k, v = p.split("=", 1)
-                kwargs[k.strip()] = _parse_param_value(v.strip())
-            else:
-                kwargs[p.strip()] = True
+    for p in actual_params:
+        if "=" in p:
+            k, v = p.split("=", 1)
+            kwargs[k.strip()] = _parse_param_value(v.strip())
+        else:
+            kwargs[p.strip()] = True
 
     # Parse --data payload
     if data:
@@ -86,7 +143,7 @@ def execute_call(
         auth = BearerAuth(os.environ[auth_env])
     else:
         # Check standard MAPI_<PROVIDER>_TOKEN env var
-        prov_env = f"MAPI_{provider.upper()}_TOKEN"
+        prov_env = f"MAPI_{resolved_provider.upper()}_TOKEN"
         if prov_env in os.environ:
             auth = BearerAuth(os.environ[prov_env])
 
@@ -99,8 +156,18 @@ def execute_call(
     if idempotent:
         kwargs["_idempotent"] = True
 
-    # Execute
-    res: MapiResult = client.execute(provider, api, source, operation, **kwargs)
+    # Execute with spinner if interactive
+    if not (dry_run or emit_curl) and console.is_terminal and c_ctx.output == "auto":
+        with console.status(
+            f"[bold cyan]Calling {resolved_provider}/{resolved_api}/{resolved_operation}...[/]"
+        ):
+            res: MapiResult = client.execute(
+                resolved_provider, resolved_api, source, resolved_operation, **kwargs
+            )
+    else:
+        res = client.execute(
+            resolved_provider, resolved_api, source, resolved_operation, **kwargs
+        )
 
     if emit_curl and isinstance(res.data, RequestConfig):
         console.print(res.data.to_curl())

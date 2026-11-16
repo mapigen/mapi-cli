@@ -45,6 +45,7 @@ def test_cli_compiler_and_sdk_loader_contract(tmp_path: Path):
     service_dir.mkdir(parents=True)
     payload = msgspec.json.encode(sdata)
     compressed = compress_zstd(payload)
+    (service_dir / "REST.mapi.json.zst").write_bytes(compressed)
     (service_dir / "REST.utilize.json.zst").write_bytes(compressed)
 
     # Write registry

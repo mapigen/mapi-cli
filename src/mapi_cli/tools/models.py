@@ -54,6 +54,7 @@ class CompileMetrics(msgspec.Struct, frozen=True, gc=False):
     reusable_param_count: int = 0
     parse_duration: float = 0.0
     extract_duration: float = 0.0
+    mapi_path: str | None = None
     utilize_path: str | None = None
     error_message: str | None = None
 

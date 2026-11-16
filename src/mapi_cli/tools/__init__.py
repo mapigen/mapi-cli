@@ -7,6 +7,7 @@ import typer
 from rich import box
 from rich.table import Table
 
+from mapi_cli.paths import resolve_data_dir, resolve_registry_path
 from mapi_cli.tools.converter import normalize_spec
 from mapi_cli.tools.extractor import extract_service_data
 from mapi_cli.tools.fetcher import fetch_spec
@@ -19,6 +20,55 @@ tools_app = typer.Typer(
     help="Maintainer build tools: fetch, extract, compile, validate, and build registries.",
     no_args_is_help=True,
 )
+
+
+def execute_validate(
+    data_dir: Path | None = None,
+    registry_path: Path | None = None,
+) -> None:
+    """Core implementation for directory validation, used by both root and tools validate."""
+    target_data_dir, _ = resolve_data_dir(data_dir)
+    target_reg_path, _ = resolve_registry_path(data_dir=target_data_dir, explicit=registry_path)
+
+    result = validate_data_directory(target_data_dir, target_reg_path)
+    table = Table(
+        title=f"Validation Report ({target_reg_path.name})",
+        box=box.ROUNDED,
+        caption=f"[dim]Data: {target_data_dir} | Registry: {target_reg_path}[/]",
+    )
+    table.add_column("Total Services", justify="right")
+    table.add_column("Valid Services", justify="right", style="green")
+    table.add_column("Broken Refs", justify="right", style="red")
+    table.add_column("Schema Errors", justify="right", style="red")
+
+    table.add_row(
+        str(result.total_services),
+        str(result.valid_services),
+        str(len(result.broken_refs)),
+        str(len(result.schema_errors)),
+    )
+    console.print(table)
+
+    if result.broken_refs or result.schema_errors:
+        for s, errs in result.broken_refs.items():
+            console.print(f"[bold red]{s}:[/] {', '.join(errs)}")
+        for s, errs in result.schema_errors.items():
+            console.print(f"[bold red]{s}:[/] {', '.join(errs)}")
+        raise typer.Exit(1)
+
+
+def execute_registry_build(
+    data_dir: Path | None = None,
+    out: Path | None = None,
+) -> None:
+    """Core implementation for registry compilation, used by both compile and registry-build."""
+    target_data_dir, _ = resolve_data_dir(data_dir)
+    target_out, _ = resolve_registry_path(data_dir=target_data_dir, explicit=out)
+
+    builder = RegistryBuilder(data_dir=target_data_dir, registry_path=target_out)
+    reg = builder.build_registry()
+    builder.save_registry(reg)
+    console.print(f"[bold green]Registry compiled:[/] {len(reg.providers)} providers -> {target_out}")
 
 
 @tools_app.command("fetch")
@@ -56,48 +106,25 @@ def cmd_extract(
 
 @tools_app.command("validate")
 def cmd_validate(
-    data_dir: Path = typer.Option(
-        Path("data"), "--data-dir", "-d", help="Directory containing compiled service data"
+    data_dir: Path | None = typer.Option(
+        None, "--data-dir", "-d", help="Directory containing compiled service data"
     ),
-    registry_path: Path = typer.Option(
-        Path("mapi-registry.json"), "--registry", "-r", help="Path to mapi-registry.json"
+    registry_path: Path | None = typer.Option(
+        None, "--registry", "-r", help="Path to mapi-registry.json (or legacy services.json)"
     ),
 ) -> None:
     """Validate data directory consistency, schemas, and $ref integrity."""
-    result = validate_data_directory(data_dir, registry_path)
-    table = Table(title="Validation Report", box=box.ROUNDED)
-    table.add_column("Total Services", justify="right")
-    table.add_column("Valid Services", justify="right", style="green")
-    table.add_column("Broken Refs", justify="right", style="red")
-    table.add_column("Schema Errors", justify="right", style="red")
-
-    table.add_row(
-        str(result.total_services),
-        str(result.valid_services),
-        str(len(result.broken_refs)),
-        str(len(result.schema_errors)),
-    )
-    console.print(table)
-
-    if result.broken_refs or result.schema_errors:
-        for s, errs in result.broken_refs.items():
-            console.print(f"[bold red]{s}:[/] {', '.join(errs)}")
-        for s, errs in result.schema_errors.items():
-            console.print(f"[bold red]{s}:[/] {', '.join(errs)}")
-        raise typer.Exit(1)
+    execute_validate(data_dir=data_dir, registry_path=registry_path)
 
 
 @tools_app.command("registry-build")
 def cmd_registry_build(
-    data_dir: Path = typer.Option(
-        Path("data"), "--data-dir", "-d", help="Directory containing service metadata"
+    data_dir: Path | None = typer.Option(
+        None, "--data-dir", "-d", help="Directory containing service metadata"
     ),
-    out: Path = typer.Option(
-        Path("mapi-registry.json"), "--out", "-o", help="Target mapi-registry.json path"
+    out: Path | None = typer.Option(
+        None, "--out", "-o", help="Target mapi-registry.json path"
     ),
 ) -> None:
     """Compile mapi-registry.json registry from metadata files on disk."""
-    builder = RegistryBuilder(data_dir=data_dir, registry_path=out)
-    reg = builder.build_registry()
-    builder.save_registry(reg)
-    console.print(f"[bold green]Registry compiled:[/] {len(reg.providers)} providers -> {out}")
+    execute_registry_build(data_dir=data_dir, out=out)

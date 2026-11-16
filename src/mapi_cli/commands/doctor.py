@@ -10,6 +10,7 @@ from rich.table import Table
 import mapi_cli
 from mapi_cli.context import CliContext
 from mapi_cli.output import emit_output
+from mapi_cli.paths import resolve_data_dir, resolve_registry_path
 
 
 def run_doctor(ctx: typer.Context) -> None:
@@ -45,7 +46,28 @@ def run_doctor(ctx: typer.Context) -> None:
         }
     )
 
-    # 2. Registry & Discovery
+    # 2. Path & Registry Resolution
+    data_dir, data_src = resolve_data_dir(c_ctx.data_dir)
+    reg_path, reg_src = resolve_registry_path(data_dir=data_dir)
+
+    checks.append(
+        {
+            "category": "Paths",
+            "check": "Data Directory",
+            "status": "PASS" if data_dir.exists() else "WARN",
+            "details": f"{data_dir} ({data_src})",
+        }
+    )
+    checks.append(
+        {
+            "category": "Paths",
+            "check": f"Registry File ({reg_path.name})",
+            "status": "PASS" if reg_path.exists() else "WARN",
+            "details": f"{reg_path} ({reg_src})",
+        }
+    )
+
+    # 3. Discovery
     try:
         providers = client.discovery.list_providers()
         checks.append(
@@ -66,7 +88,7 @@ def run_doctor(ctx: typer.Context) -> None:
             }
         )
 
-    # 3. Transport
+    # 4. Transport
     try:
         import niquests  # type: ignore
 
@@ -95,7 +117,9 @@ def run_doctor(ctx: typer.Context) -> None:
     table.add_column("Details", style="dim")
 
     for c in checks:
-        status_style = "bold green" if c["status"] == "PASS" else "bold red"
-        table.add_row(c["category"], c["check"], f"[{status_style}]{c['status']}[/]", c["details"])
+        status_style = "bold green" if c["status"] == "PASS" else "bold yellow" if c["status"] == "WARN" else "bold red"
+        table.add_row(
+            c["category"], c["check"], f"[{status_style}]{c['status']}[/]", c["details"]
+        )
 
     emit_output(checks, format_type=c_ctx.output, rich_renderable=table)

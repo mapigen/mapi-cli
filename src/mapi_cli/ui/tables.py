@@ -10,7 +10,7 @@ from mapi_cli.ui.theme import method_style
 
 
 def build_providers_table(provider_data: list[dict[str, Any]]) -> Table:
-    """Build a rich table for listing API providers."""
+    """Build a rich table for listing API providers with download status."""
     table = Table(
         title="Available Providers",
         box=box.ROUNDED,
@@ -20,12 +20,22 @@ def build_providers_table(provider_data: list[dict[str, Any]]) -> Table:
     table.add_column("Provider", style="provider", no_wrap=True)
     table.add_column("APIs", style="cyan")
     table.add_column("Operations", justify="right", style="green")
+    table.add_column("Status", justify="center")
 
     for item in provider_data:
+        raw_status = str(item.get("status", "Not Downloaded"))
+        if raw_status == "Downloaded":
+            status_badge = "[bold green]Downloaded[/]"
+        elif raw_status == "Not Downloaded":
+            status_badge = "[dim yellow]Not Downloaded[/]"
+        else:
+            status_badge = f"[cyan]{raw_status}[/]"
+
         table.add_row(
             item["provider"],
             ", ".join(item.get("apis", [])),
             str(item.get("operations", 0)),
+            status_badge,
         )
     return table
 
