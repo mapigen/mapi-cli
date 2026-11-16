@@ -23,7 +23,7 @@ from mapi_cli.tools import execute_registry_build, execute_validate, tools_app
 app = typer.Typer(
     name="mapi",
     help="[bold cyan]mapi[/]: Universal API CLI, toolchain, and discovery engine.",
-    no_args_is_help=True,
+    no_args_is_help=False,
     rich_markup_mode="rich",
     pretty_exceptions_enable=False,
 )
@@ -102,9 +102,20 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def root(
     ctx: typer.Context,
+    no_tui: bool = typer.Option(
+        False,
+        "--no-tui",
+        envvar="MAPI_NO_TUI",
+        help="Disable interactive TUI mode (Tip: Pass --no-tui or set MAPI_NO_TUI=1 to run in standard CLI mode).",
+    ),
+    tui: bool = typer.Option(
+        False,
+        "--tui",
+        help="Explicitly launch interactive TUI dashboard mode.",
+    ),
     data_dir: Path | None = typer.Option(
         None, "--data-dir", envvar="MAPI_DATA_DIR", help="Custom data directory"
     ),
@@ -140,6 +151,24 @@ def root(
         output=output,
         show_meta=show_meta,
     )
+
+    if ctx.invoked_subcommand is None:
+        import sys
+
+        # If interactive terminal and not disabled with --no-tui, launch MapiTUIApp
+        if not no_tui and (tui or sys.stdout.isatty()):
+            from mapi_cli.ui.main_tui import MapiTUIApp
+
+            tui_app = MapiTUIApp(client=ctx.obj.client, data_dir=data_dir)
+            tui_app.run()
+            raise typer.Exit()
+        else:
+            typer.echo(ctx.get_help())
+            typer.secho(
+                "\nTip: Interactive TUI runs by default in a terminal. Pass --no-tui (or set MAPI_NO_TUI=1) to disable.",
+                dim=True,
+            )
+            raise typer.Exit()
 
 
 def main() -> int:

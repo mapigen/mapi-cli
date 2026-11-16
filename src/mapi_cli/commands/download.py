@@ -168,7 +168,8 @@ def execute_download(
     no_tui: bool = typer.Option(
         False,
         "--no-tui",
-        help="Disable interactive Textual TUI and use standard terminal prompt",
+        envvar="MAPI_NO_TUI",
+        help="Disable interactive Textual TUI (Tip: Pass --no-tui or set MAPI_NO_TUI=1 to disable TUI mode)",
     ),
 ) -> None:
     """Download and compile remote API specifications into local storage."""

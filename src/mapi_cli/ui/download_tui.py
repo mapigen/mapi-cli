@@ -20,41 +20,71 @@ from textual.widgets import (
 
 from mapi_cli.commands.download import _download_and_compile, _is_api_local
 from mapi_cli.paths import resolve_data_dir
+from mapi_cli.ui.banner import render_banner
 
 
 class DownloadTUIApp(App[None]):
     """Interactive Textual TUI for browsing and downloading MAPI API specifications."""
 
     TITLE = "MAPI Specification Manager"
-    SUB_TITLE = "Arrow Keys (↑/↓) to navigate • Enter to download"
+    SUB_TITLE = "Arrow Keys (↑/↓) to navigate • Enter to download • t: theme • /: search"
 
     CSS = """
     Screen {
-        background: #0d1117;
-        color: #c9d1d9;
+        background: #111C18;
+        color: #E1F4E2;
+    }
+
+    Screen.light-mode {
+        background: #F7F4EF;
+        color: #263832;
     }
 
     #header_container {
         height: auto;
         padding: 0 1;
-        background: #161b22;
-        border-bottom: heavy #30363d;
+        background: #1B2A25;
+        border-bottom: heavy #2E4A40;
+    }
+
+    Screen.light-mode #header_container {
+        background: #DDECE6;
+        border-bottom: heavy #B2D0C5;
+    }
+
+    #banner_static {
+        margin: 0;
+        padding: 0;
     }
 
     #path_label {
-        color: #8b949e;
-        padding-top: 1;
+        color: #7E9F93;
+        padding-top: 0;
+    }
+
+    Screen.light-mode #path_label {
+        color: #5C736B;
     }
 
     #filter_input {
         margin: 1 0;
-        background: #0d1117;
-        border: tall #30363d;
-        color: #58a6ff;
+        background: #111C18;
+        border: tall #2E4A40;
+        color: #7EE0D2;
+    }
+
+    Screen.light-mode #filter_input {
+        background: #FFFFFF;
+        border: tall #B2D0C5;
+        color: #263832;
     }
 
     #filter_input:focus {
-        border: tall #58a6ff;
+        border: tall #ACE1AF;
+    }
+
+    Screen.light-mode #filter_input:focus {
+        border: tall #2F847C;
     }
 
     #table_container {
@@ -64,32 +94,54 @@ class DownloadTUIApp(App[None]):
 
     #providers_table {
         height: 1fr;
-        background: #161b22;
-        border: round #30363d;
+        background: #1B2A25;
+        border: round #2E4A40;
+    }
+
+    Screen.light-mode #providers_table {
+        background: #FFFFFF;
+        border: round #B2D0C5;
     }
 
     #providers_table:focus {
-        border: round #58a6ff;
+        border: round #7EE0D2;
+    }
+
+    Screen.light-mode #providers_table:focus {
+        border: round #2F847C;
     }
 
     #status_panel {
         height: auto;
         min-height: 4;
         max-height: 6;
-        background: #161b22;
-        border-top: heavy #30363d;
+        background: #1B2A25;
+        border-top: heavy #2E4A40;
         padding: 0 1;
     }
 
+    Screen.light-mode #status_panel {
+        background: #DDECE6;
+        border-top: heavy #B2D0C5;
+    }
+
     #status_text {
-        color: #8b949e;
+        color: #7E9F93;
         padding-top: 1;
+    }
+
+    Screen.light-mode #status_text {
+        color: #263832;
     }
 
     #loader {
         height: 2;
-        color: #58a6ff;
+        color: #7EE0D2;
         display: none;
+    }
+
+    Screen.light-mode #loader {
+        color: #2F847C;
     }
     """
 
@@ -97,108 +149,125 @@ class DownloadTUIApp(App[None]):
         Binding("enter", "download_selected", "Download Selected", priority=True),
         Binding("a", "download_all", "Download All"),
         Binding("f", "toggle_force", "Toggle Force"),
+        Binding("t", "toggle_theme", "Toggle Celadon Theme"),
         Binding("slash", "focus_filter", "Search / Filter", key_display="/"),
-        Binding("r", "refresh_data", "Refresh"),
+        Binding("escape", "clear_filter", "Clear Filter / Unfocus"),
         Binding("q", "quit", "Quit"),
-        Binding("escape", "escape_action", "Clear / Quit", show=False),
-        Binding("j", "cursor_down", "Down", show=False),
-        Binding("k", "cursor_up", "Up", show=False),
     ]
 
-    def __init__(self, client: Any, data_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        client: Any,
+        data_dir: Path | None = None,
+        force: bool = False,
+    ) -> None:
         super().__init__()
         self.client = client
-        self.data_dir: Path = data_dir or resolve_data_dir()[0]
-        self.force: bool = False
-        self._is_busy: bool = False
+        self.data_dir = data_dir or resolve_data_dir()[0]
+        self.force = force
+        self.is_dark: bool = True
         self._all_items: list[dict[str, Any]] = []
+        self._is_busy = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Vertical(id="header_container"):
+            yield Static(render_banner(self.is_dark), id="banner_static")
             yield Label(
-                f"[bold cyan]Active Storage:[/] [white]{self.data_dir}[/]",
+                f"Platform Storage: [cyan]{self.data_dir}[/] • Force mode: [yellow]{'ON' if self.force else 'OFF'}[/]",
                 id="path_label",
             )
             yield Input(
-                placeholder="Search or filter providers (press / to focus, Esc to return)...",
+                placeholder="Type '/' to filter providers, APIs, or categories (Press 'Enter' to download selected)...",
                 id="filter_input",
             )
-
         with Vertical(id="table_container"):
-            yield DataTable[str](id="providers_table")
-
+            yield DataTable(id="providers_table", cursor_type="row")
         with Vertical(id="status_panel"):
             yield LoadingIndicator(id="loader")
             yield Static(
-                "[bold cyan]Tip:[/] Use [bold]↑/↓[/] to navigate rows, [bold]Enter[/] to download, [bold]a[/] for all, [bold]f[/] for force.",
+                "[dim]Ready. Select an API with ↑/↓ and press [bold]Enter[/] to download, or [bold]a[/] to download all.[/]",
                 id="status_text",
             )
-
         yield Footer()
 
     def on_mount(self) -> None:
         table = self.query_one("#providers_table", DataTable)
-        table.cursor_type = "row"
-        table.add_column("Provider", key="provider")
-        table.add_column("API", key="api")
-        table.add_column("Status", key="status")
-        table.add_column("Operations", key="ops")
-        table.add_column("Auth", key="auth")
-        table.add_column("Description", key="desc")
+        table.add_column("Provider", key="provider", width=16)
+        table.add_column("API", key="api", width=14)
+        table.add_column("Status", key="status", width=16)
+        table.add_column("Operations", key="ops", width=12)
+        table.add_column("Upstream Specification URL", key="url")
 
-        self._load_registry_items()
+        self._load_registry_data()
         self._populate_table()
         table.focus()
 
-    def _load_registry_items(self) -> None:
-        discovery = self.client.discovery
-        items: list[dict[str, Any]] = []
-        for p in discovery.list_providers():
-            for a in discovery.list_apis(p):
-                info = discovery.get_api_info(p, a)
-                src = (getattr(info, "sources", []) or ["github"])[0]
-                is_dl = _is_api_local(self.data_dir, p, src, a)
-                items.append(
+    def set_loading(self, visible: bool) -> None:
+        """Thread-safe and exception-free loader display toggle."""
+        loader = self.query_one("#loader", LoadingIndicator)
+        loader.styles.display = "block" if visible else "none"
+
+    def _load_registry_data(self) -> None:
+        self._all_items.clear()
+        providers = self.client.discovery.list_providers()
+
+        for p in providers:
+            apis = self.client.discovery.list_apis(p)
+            for a in apis:
+                try:
+                    info = self.client.discovery.get_api_info(p, a)
+                    sources = getattr(info, "sources", ["github"])
+                    source = sources[0] if sources else "github"
+                    spec_url = getattr(info, "spec_url", "") or ""
+                    ops_count = getattr(info, "operation_count", 0)
+                    is_local = _is_api_local(self.data_dir, p, source, a)
+                except Exception:
+                    source = "github"
+                    spec_url = ""
+                    ops_count = 0
+                    is_local = False
+
+                self._all_items.append(
                     {
                         "provider": p,
                         "api": a,
-                        "source": src,
-                        "downloaded": is_dl,
-                        "operations": getattr(info, "operation_count", 0),
-                        "auth": getattr(info, "primary_auth", "none"),
-                        "description": getattr(info, "description", ""),
-                        "spec_url": getattr(info, "spec_url", None),
+                        "source": source,
+                        "spec_url": spec_url,
+                        "operations": ops_count,
+                        "downloaded": is_local,
                     }
                 )
-        self._all_items = items
 
     def _populate_table(self, query: str = "") -> None:
         table = self.query_one("#providers_table", DataTable)
         table.clear()
 
         q = query.strip().lower()
+        if q.startswith("/"):
+            q = q[1:]
+
         for item in self._all_items:
             p = item["provider"]
             a = item["api"]
-            desc = item["description"]
-            if q and q not in p.lower() and q not in a.lower() and q not in desc.lower():
+            url = item["spec_url"]
+            ops = str(item["operations"])
+            is_dl = item["downloaded"]
+
+            # Filter check
+            if q and (q not in p.lower() and q not in a.lower() and q not in url.lower()):
                 continue
 
             row_key = f"{p}/{a}"
-            status_text = (
-                Text("Downloaded", style="bold green")
-                if item["downloaded"]
-                else Text("Not Downloaded", style="bold yellow")
-            )
+            status_style = "bold green" if is_dl else "dim yellow"
+            status_str = "Downloaded" if is_dl else "Not Downloaded"
 
             table.add_row(
                 Text(p, style="bold cyan"),
                 Text(a, style="white"),
-                status_text,
-                Text(str(item["operations"]), style="green"),
-                Text(item["auth"], style="yellow"),
-                Text(desc, style="dim"),
+                Text(status_str, style=status_style),
+                Text(ops, style="green"),
+                Text(url or "(no remote spec)", style="dim"),
                 key=row_key,
             )
 
@@ -206,47 +275,43 @@ class DownloadTUIApp(App[None]):
         if event.input.id == "filter_input":
             self._populate_table(query=event.value)
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
+    def action_focus_filter(self) -> None:
+        input_widget = self.query_one("#filter_input", Input)
+        input_widget.focus()
+
+    def action_clear_filter(self) -> None:
+        filter_input = self.query_one("#filter_input", Input)
+        if filter_input.value:
+            filter_input.value = ""
         table = self.query_one("#providers_table", DataTable)
         table.focus()
 
-    def action_focus_filter(self) -> None:
-        self.query_one("#filter_input", Input).focus()
-
-    def action_escape_action(self) -> None:
-        filter_input = self.query_one("#filter_input", Input)
-        if filter_input.has_focus:
-            filter_input.value = ""
-            self.query_one("#providers_table", DataTable).focus()
+    def action_toggle_theme(self) -> None:
+        """Toggle Celadon Green theme between Dark and Light mode."""
+        self.is_dark = not self.is_dark
+        if self.is_dark:
+            self.screen.remove_class("light-mode")
         else:
-            self.exit()
+            self.screen.add_class("light-mode")
+
+        banner = self.query_one("#banner_static", Static)
+        banner.update(render_banner(self.is_dark))
+        mode_name = "Celadon Dark" if self.is_dark else "Celadon Light"
+        self.notify(f"Theme switched to {mode_name}")
 
     def action_toggle_force(self) -> None:
         self.force = not self.force
+        label = self.query_one("#path_label", Label)
+        label.update(
+            f"Platform Storage: [cyan]{self.data_dir}[/] • Force mode: [yellow]{'ON' if self.force else 'OFF'}[/]"
+        )
         status_label = self.query_one("#status_text", Static)
         if self.force:
             status_label.update("[bold yellow]Force mode ON:[/] Will re-download and re-compile existing specs.")
-            self.notify("Force re-download enabled", severity="warning")
+            self.notify("Force mode enabled", severity="warning")
         else:
-            status_label.update("[bold cyan]Force mode OFF:[/] Will skip already downloaded specs.")
+            status_label.update("[dim]Force mode OFF: Existing specs will be skipped.[/]")
             self.notify("Force mode disabled")
-
-    def action_refresh_data(self) -> None:
-        self._load_registry_items()
-        filter_val = self.query_one("#filter_input", Input).value
-        self._populate_table(query=filter_val)
-        self.notify("Registry reloaded")
-
-    def action_cursor_up(self) -> None:
-        table = self.query_one("#providers_table", DataTable)
-        table.action_cursor_up()
-
-    def action_cursor_down(self) -> None:
-        table = self.query_one("#providers_table", DataTable)
-        table.action_cursor_down()
-
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        self.action_download_selected()
 
     def action_download_selected(self) -> None:
         if self._is_busy:
@@ -258,21 +323,23 @@ class DownloadTUIApp(App[None]):
             return
 
         coordinate = table.cursor_coordinate
-        row_key = table.coordinate_to_cell_key(coordinate).row_key
-        if not row_key or not row_key.value:
+        row_key_obj = table.coordinate_to_cell_key(coordinate).row_key
+        if not row_key_obj:
             return
 
-        key_str = str(row_key.value)
+        key_str = str(getattr(row_key_obj, "value", row_key_obj))
+        if "/" not in key_str:
+            return
+
         provider, api = key_str.split("/", 1)
         self._run_single_download(provider, api)
 
     @work(thread=True, exclusive=True)
     def _run_single_download(self, provider: str, api: str) -> None:
         self._is_busy = True
-        loader = self.query_one("#loader", LoadingIndicator)
         status_text = self.query_one("#status_text", Static)
 
-        self.call_from_thread(loader.styles.display.__setattr__, "value", "block")
+        self.call_from_thread(self.set_loading, True)
         self.call_from_thread(
             status_text.update,
             f"[bold cyan]Loading:[/] Fetching and compiling [bold]{provider}/{api}[/]...",
@@ -315,7 +382,7 @@ class DownloadTUIApp(App[None]):
             )
             self.notify(f"Error downloading {provider}/{api}", severity="error")
 
-        self.call_from_thread(loader.styles.display.__setattr__, "value", "none")
+        self.call_from_thread(self.set_loading, False)
         self._is_busy = False
 
     def action_download_all(self) -> None:
@@ -327,11 +394,10 @@ class DownloadTUIApp(App[None]):
     @work(thread=True, exclusive=True)
     def _run_all_downloads(self) -> None:
         self._is_busy = True
-        loader = self.query_one("#loader", LoadingIndicator)
         status_text = self.query_one("#status_text", Static)
         table = self.query_one("#providers_table", DataTable)
 
-        self.call_from_thread(loader.styles.display.__setattr__, "value", "block")
+        self.call_from_thread(self.set_loading, True)
 
         items_to_sync = [
             item for item in self._all_items if self.force or not item["downloaded"]
@@ -342,7 +408,7 @@ class DownloadTUIApp(App[None]):
                 status_text.update,
                 "[bold green]All specifications are already downloaded locally![/]",
             )
-            self.call_from_thread(loader.styles.display.__setattr__, "value", "none")
+            self.call_from_thread(self.set_loading, False)
             self._is_busy = False
             return
 
@@ -377,6 +443,6 @@ class DownloadTUIApp(App[None]):
             status_text.update,
             f"[bold green]Batch download complete![/] {success_count}/{total} specifications downloaded.",
         )
-        self.call_from_thread(loader.styles.display.__setattr__, "value", "none")
+        self.call_from_thread(self.set_loading, False)
         self.notify(f"Batch completed: {success_count}/{total} downloaded")
         self._is_busy = False

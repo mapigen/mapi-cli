@@ -31,6 +31,14 @@ async def test_download_tui_navigation_and_filter():
         await pilot.press("f")
         assert app.force is False
 
+        # Test Toggle Theme
+        assert app.is_dark is True
+        await pilot.press("t")
+        assert app.is_dark is False
+        assert "light-mode" in app.screen.classes
+        await pilot.press("t")
+        assert app.is_dark is True
+
         # Test Filter / Search Input
         await pilot.press("slash")
         input_widget = pilot.app.query_one("#filter_input", Input)
@@ -44,6 +52,16 @@ async def test_download_tui_navigation_and_filter():
         input_widget.value = ""
         await pilot.pause()
         assert table.row_count >= 5
+
+        # Test loader display toggles without 'str object has no attribute value' error
+        app.set_loading(True)
+        assert app.query_one("#loader").styles.display == "block"
+        app.set_loading(False)
+        assert app.query_one("#loader").styles.display == "none"
+
+        # Test Pressing Enter on selected row
+        await pilot.press("enter")
+        await pilot.pause()
 
         # Test Quit
         await pilot.press("q")

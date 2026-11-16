@@ -12,6 +12,7 @@ def test_download_help():
     assert result.exit_code == 0
     assert "Download and compile remote API specifications" in result.stdout
     assert "--all" in result.stdout
+    assert "--no-tui" in result.stdout
 
 
 def test_download_already_downloaded():
@@ -32,3 +33,11 @@ def test_download_unknown_provider():
     result = runner.invoke(app, ["download", "nonexistent_provider"])
     assert result.exit_code == 1
     assert "No APIs found" in result.stdout
+
+
+def test_root_no_tui_comment():
+    """Verify running 'mapi --no-tui' displays the tip comment to disable/enable TUI."""
+    result = runner.invoke(app, ["--no-tui"])
+    assert result.exit_code == 0
+    assert "Tip: Interactive TUI" in result.stdout
+    assert "--no-tui" in result.stdout
