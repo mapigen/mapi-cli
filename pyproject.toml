@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mapi-cli"
+version = "0.1.0"
+description = "Universal API CLI and toolchain built on the mapi SDK"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [
+    { name = "MAPI Team" },
+]
+dependencies = [
+    "mapi>=0.1.0,<0.2.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "platformdirs>=4.0.0",
+]
+
+[project.optional-dependencies]
+interactive = [
+    "prompt_toolkit>=3.0.0",
+]
+tools = [
+    "jinja2>=3.1.0",
+    "openapi-spec-validator>=0.7.0",
+    "psutil>=6.0.0",
+]
+all = [
+    "mapi-cli[interactive,tools]",
+]
+
+[project.scripts]
+mapi = "mapi_cli.app:main"
+mapi-cli = "mapi_cli.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mapi_cli"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+    "B008", # function call in argument defaults (standard idiom for Typer)
+]
+
+[tool.pyright]
+include = ["src", "tests"]
+venvPath = "../mapi"
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
