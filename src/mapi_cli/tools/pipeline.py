@@ -29,7 +29,7 @@ def process_service(
         parse_dur = time.perf_counter() - t_parse
 
         t_extract = time.perf_counter()
-        service_data = extract_service_data(f"{provider}/{api}/{source}", spec_dict)
+        service_data = extract_service_data(api, spec_dict)
         extract_dur = time.perf_counter() - t_extract
 
         # Serialize & compress
