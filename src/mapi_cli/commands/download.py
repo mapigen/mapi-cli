@@ -165,6 +165,11 @@ def execute_download(
         "-f",
         help="Force re-download even if already downloaded locally",
     ),
+    no_tui: bool = typer.Option(
+        False,
+        "--no-tui",
+        help="Disable interactive Textual TUI and use standard terminal prompt",
+    ),
 ) -> None:
     """Download and compile remote API specifications into local storage."""
     c_ctx: CliContext = ctx.obj
@@ -263,8 +268,17 @@ def execute_download(
         emit_output(results, format_type=c_ctx.output, rich_renderable=table)
         return
 
-    # Case 3: No arguments given -> interactive prompt
-    console.print("[bold cyan]MAPI Interactive Spec Download[/]\n")
+    # Case 3: No arguments given -> interactive TUI if in TTY, else fallback prompt
+    import sys
+    if sys.stdin.isatty() and not no_tui:
+        from mapi_cli.ui.download_tui import DownloadTUIApp
+
+        tui_app = DownloadTUIApp(client=client, data_dir=data_dir)
+        tui_app.force = force
+        tui_app.run()
+        return
+
+    console.print("[bold cyan]MAPI Spec Download Selection[/]\n")
     candidates: list[tuple[str, str, str]] = []
     for p in all_providers:
         for a in discovery.list_apis(p):
