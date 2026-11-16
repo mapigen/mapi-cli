@@ -21,6 +21,7 @@ from textual.widgets import (
 from mapi_cli.commands.download import _download_and_compile, _is_api_local
 from mapi_cli.paths import resolve_data_dir
 from mapi_cli.ui.banner import render_banner
+from mapi_cli.ui.styles import build_app_tcss
 
 
 class DownloadTUIApp(App[None]):
@@ -28,122 +29,7 @@ class DownloadTUIApp(App[None]):
 
     TITLE = "MAPI Specification Manager"
     SUB_TITLE = "Arrow Keys (↑/↓) to navigate • Enter to download • t: theme • /: search"
-
-    CSS = """
-    Screen {
-        background: #111C18;
-        color: #E1F4E2;
-    }
-
-    Screen.light-mode {
-        background: #F7F4EF;
-        color: #263832;
-    }
-
-    #header_container {
-        height: auto;
-        padding: 0 1;
-        background: #1B2A25;
-        border-bottom: heavy #2E4A40;
-    }
-
-    Screen.light-mode #header_container {
-        background: #DDECE6;
-        border-bottom: heavy #B2D0C5;
-    }
-
-    #banner_static {
-        margin: 0;
-        padding: 0;
-    }
-
-    #path_label {
-        color: #7E9F93;
-        padding-top: 0;
-    }
-
-    Screen.light-mode #path_label {
-        color: #5C736B;
-    }
-
-    #filter_input {
-        margin: 1 0;
-        background: #111C18;
-        border: tall #2E4A40;
-        color: #7EE0D2;
-    }
-
-    Screen.light-mode #filter_input {
-        background: #FFFFFF;
-        border: tall #B2D0C5;
-        color: #263832;
-    }
-
-    #filter_input:focus {
-        border: tall #ACE1AF;
-    }
-
-    Screen.light-mode #filter_input:focus {
-        border: tall #2F847C;
-    }
-
-    #table_container {
-        height: 1fr;
-        padding: 0 1;
-    }
-
-    #providers_table {
-        height: 1fr;
-        background: #1B2A25;
-        border: round #2E4A40;
-    }
-
-    Screen.light-mode #providers_table {
-        background: #FFFFFF;
-        border: round #B2D0C5;
-    }
-
-    #providers_table:focus {
-        border: round #7EE0D2;
-    }
-
-    Screen.light-mode #providers_table:focus {
-        border: round #2F847C;
-    }
-
-    #status_panel {
-        height: auto;
-        min-height: 4;
-        max-height: 6;
-        background: #1B2A25;
-        border-top: heavy #2E4A40;
-        padding: 0 1;
-    }
-
-    Screen.light-mode #status_panel {
-        background: #DDECE6;
-        border-top: heavy #B2D0C5;
-    }
-
-    #status_text {
-        color: #7E9F93;
-        padding-top: 1;
-    }
-
-    Screen.light-mode #status_text {
-        color: #263832;
-    }
-
-    #loader {
-        height: 2;
-        color: #7EE0D2;
-        display: none;
-    }
-
-    Screen.light-mode #loader {
-        color: #2F847C;
-    }
-    """
+    CSS = build_app_tcss()
 
     BINDINGS = [
         Binding("enter", "download_selected", "Download Selected", priority=True),
