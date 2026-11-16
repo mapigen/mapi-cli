@@ -49,7 +49,7 @@ def complete_api(
     if not discovery:
         return []
 
-    provider = ctx.params.get("provider")
+    provider = ctx.params.get("provider") or ctx.params.get("service")
     if not provider and args:
         # Check if first positional arg is provider
         provider = args[0]
@@ -71,14 +71,25 @@ def complete_operation(
     if not discovery:
         return []
 
-    provider = ctx.params.get("provider")
+    provider = ctx.params.get("provider") or ctx.params.get("service")
     api = ctx.params.get("api")
     if not provider and len(args) >= 1:
         provider = args[0]
     if not api and len(args) >= 2:
         api = args[1]
 
-    if not provider or not api:
+    if not provider:
+        return []
+
+    if not api:
+        try:
+            apis = discovery.list_apis(provider)
+            if len(apis) == 1:
+                api = apis[0]
+        except Exception:
+            pass
+
+    if not api:
         return []
 
     try:

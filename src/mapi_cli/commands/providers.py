@@ -7,8 +7,8 @@ from mapi_cli.output import emit_output
 from mapi_cli.ui.tables import build_providers_table
 
 
-def list_providers(ctx: typer.Context) -> None:
-    """List all available API providers."""
+def execute_list_providers(ctx: typer.Context) -> None:
+    """List all available API providers with download status."""
     c_ctx: CliContext = ctx.obj
     client = c_ctx.client
 
@@ -58,3 +58,14 @@ def list_providers(ctx: typer.Context) -> None:
 
     table = build_providers_table(table_data)
     emit_output(table_data, format_type=c_ctx.output, rich_renderable=table)
+    if c_ctx.output == "auto":
+        from mapi_cli.ui.console import console
+
+        console.print(
+            "[dim]Tip: Run 'mapi apis <service>' to inspect operations or 'mapi download <service>' to download.[/]"
+        )
+
+
+def list_providers(ctx: typer.Context) -> None:
+    """Alias for 'mapi apis' listing all available providers."""
+    execute_list_providers(ctx)

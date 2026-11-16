@@ -29,14 +29,32 @@ app = typer.Typer(
 )
 
 # 1. Discovery & Inspection Commands
-app.command("providers", help="List all available API providers.")(list_providers)
-app.command("apis", help="List all APIs for a given provider.")(list_apis)
-app.command("ops", help="List operations for a provider and API.")(list_operations)
-app.command("operations", help="Alias for 'mapi ops' - list operations.")(list_operations)
-app.command("describe", help="Show full parameter details and schema for an operation.")(
-    describe_operation
-)
-app.command("search", help="Fuzzy search across providers, APIs, and operations.")(search_all)
+app.command(
+    "apis",
+    help="List all providers, or inspect APIs and operations for a service.",
+)(list_apis)
+app.command(
+    "ops",
+    help="List and filter operations for a provider/API.",
+)(list_operations)
+app.command(
+    "operations",
+    hidden=True,
+    help="Alias for 'mapi ops' - list operations.",
+)(list_operations)
+app.command(
+    "providers",
+    hidden=True,
+    help="Alias for 'mapi apis' - list all providers.",
+)(list_providers)
+app.command(
+    "describe",
+    help="Show full parameter details and schema for an operation.",
+)(describe_operation)
+app.command(
+    "search",
+    help="Fuzzy search across providers, APIs, operations, and methods.",
+)(search_all)
 
 # 2. Execution Commands
 app.command("call", help="Execute an operation directly with key=value parameters.")(execute_call)
