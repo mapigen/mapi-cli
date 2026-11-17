@@ -337,3 +337,4 @@ def execute_operation_call(
     if (dry_run or emit_curl) and isinstance(res.data, RequestConfig):
         return res.data
     return res
+

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.widgets import (
+    Button,
     DataTable,
     Footer,
     Header,
@@ -32,6 +34,7 @@ from mapi_cli.operations import (
 from mapi_cli.paths import resolve_data_dir
 from mapi_cli.ui.banner import render_banner
 from mapi_cli.ui.command_palette import filter_commands
+from mapi_cli.ui.operation_view import OperationRunnerPage
 from mapi_cli.ui.styles import CELADON_DARK, CELADON_LIGHT, build_app_tcss, method_style
 
 
@@ -48,11 +51,11 @@ class MapiTUIApp(App[None]):
     """
 
     TITLE = "MAPI"
-    SUB_TITLE = "Type '/' for commands • Enter: inspect • c: call • Ctrl+← / Ctrl+→: pages • t: theme"
+    SUB_TITLE = "Type '/' for commands • Enter: open / select • c: call • Ctrl+← / Ctrl+→: pages • t: theme"
     CSS = build_app_tcss()
 
     BINDINGS = [
-        Binding("enter", "select_row", "Select / Inspect"),
+        Binding("enter", "select_row", "Select / Open"),
         Binding("ctrl+left", "page_back", "Back / Prev Page", key_display="Ctrl+←"),
         Binding("ctrl+right", "page_forward", "Forward / Next Page", key_display="Ctrl+→"),
         Binding("c", "call_action", "Call Endpoint"),
@@ -63,8 +66,8 @@ class MapiTUIApp(App[None]):
         Binding("a", "download_all", "Download All"),
         Binding("r", "refresh_data", "Refresh"),
         Binding("escape", "escape_action", "Back / Clear"),
-        Binding("backspace", "back_action", "Back to Catalog", show=False),
-        Binding("b", "back_action", "Back to Catalog", show=False),
+        Binding("backspace", "back_action", "Back", show=False),
+        Binding("b", "back_action", "Back", show=False),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -80,7 +83,7 @@ class MapiTUIApp(App[None]):
         self._all_items: list[dict[str, Any]] = []
         self._current_operations: list[dict[str, Any]] = []
         self._is_busy: bool = False
-        self.current_view: str = "providers"  # "providers" or "operations"
+        self.current_view: str = "providers"  # "providers", "operations", or "operation_detail"
         self.selected_provider: str | None = None
         self.selected_api: str | None = None
         self.selected_operation: str | None = None
@@ -96,6 +99,8 @@ class MapiTUIApp(App[None]):
             yield Static(render_banner(self.is_dark), id="banner_static")
         with Vertical(id="table_container"):
             yield DataTable(id="catalog_table", cursor_type="row")
+            with Vertical(id="operation_runner_container"):
+                pass
         with Vertical(id="command_container"):
             with Vertical(id="suggestions_container"):
                 yield OptionList(id="suggestions_list")
@@ -365,6 +370,14 @@ class MapiTUIApp(App[None]):
             event.stop()
             return
 
+        if self.current_view == "operation_detail":
+            focused = self.focused
+            if not isinstance(focused, Input) and event.key in ("backspace", "b"):
+                self.action_page_back()
+                event.prevent_default()
+                event.stop()
+                return
+
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         cmd_id = event.option_id
         if cmd_id:
@@ -464,6 +477,9 @@ class MapiTUIApp(App[None]):
         input_widget.cursor_position = 1
 
     def action_back_to_catalog(self) -> None:
+        if self.current_view == "operation_detail":
+            self._close_operation_page()
+
         last_provider = self.selected_provider
         last_api = self.selected_api
         self.current_view = "providers"
@@ -496,14 +512,23 @@ class MapiTUIApp(App[None]):
         self.notify("Returned to Providers & APIs catalog")
 
     def action_back_action(self) -> None:
-        if self.current_view == "operations":
+        if self.current_view == "operation_detail":
+            self._close_operation_page()
+        elif self.current_view == "operations":
             self.action_back_to_catalog()
 
     def action_escape_action(self) -> None:
         container = self.query_one("#suggestions_container", Vertical)
         if container.styles.display == "block":
             container.styles.display = "none"
-            self.query_one("#catalog_table", DataTable).focus()
+            if self.current_view == "operation_detail":
+                try:
+                    page = self.query_one(OperationRunnerPage)
+                    self._focus_first_input(page)
+                except Exception:
+                    pass
+            else:
+                self.query_one("#catalog_table", DataTable).focus()
             return
 
         input_widget = self.query_one("#command_input", Input)
@@ -511,9 +536,14 @@ class MapiTUIApp(App[None]):
             input_widget.value = ""
             if self.current_view == "operations":
                 self._populate_operations()
-            else:
+                self.query_one("#catalog_table", DataTable).focus()
+            elif self.current_view == "providers":
                 self._populate_catalog()
-            self.query_one("#catalog_table", DataTable).focus()
+                self.query_one("#catalog_table", DataTable).focus()
+            return
+
+        if self.current_view == "operation_detail":
+            self._close_operation_page()
             return
 
         if self.current_view == "operations":
@@ -533,6 +563,12 @@ class MapiTUIApp(App[None]):
         banner.update(render_banner(self.is_dark))
         if self.current_view == "operations":
             self._populate_operations()
+        elif self.current_view == "operation_detail":
+            try:
+                page = self.query_one(OperationRunnerPage)
+                page.set_theme(self.is_dark)
+            except Exception:
+                pass
         else:
             self._populate_catalog()
         mode_name = "Celadon Dark" if self.is_dark else "Celadon Light"
@@ -542,11 +578,28 @@ class MapiTUIApp(App[None]):
         self._load_data()
         if self.current_view == "operations" and self.selected_provider:
             self._show_operations_for(self.selected_provider, self.selected_api)
+        elif self.current_view == "operation_detail" and self.selected_operation:
+            self._open_operation_page(self.selected_operation)
         else:
             self._populate_catalog()
         self.notify("Registry and local specifications reloaded")
 
     def action_select_row(self) -> None:
+        if self.current_view == "operation_detail":
+            try:
+                page = self.query_one(OperationRunnerPage)
+                self.post_message(
+                    OperationRunnerPage.RunRequested(
+                        chk=page.chk,
+                        kwargs=page.get_collected_inputs(),
+                        dry_run=False,
+                        emit_curl=False,
+                    )
+                )
+            except Exception:
+                pass
+            return
+
         table = self.query_one("#catalog_table", DataTable)
         if table.row_count == 0:
             return
@@ -561,8 +614,9 @@ class MapiTUIApp(App[None]):
                 return
             provider, api = key_str.split("/", 1)
             self._show_operations_for(provider, api)
-        else:
-            self._inspect_operation_by_id(key_str)
+        elif self.current_view == "operations":
+            self.selected_operation = key_str
+            self._open_operation_page(key_str)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         key_str = str(getattr(event.row_key, "value", event.row_key))
@@ -570,9 +624,9 @@ class MapiTUIApp(App[None]):
             if "/" in key_str:
                 provider, api = key_str.split("/", 1)
                 self._show_operations_for(provider, api)
-        else:
+        elif self.current_view == "operations":
             self.selected_operation = key_str
-            self._inspect_operation_by_id(key_str)
+            self._open_operation_page(key_str)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         if self.current_view == "operations" and event.row_key:
@@ -625,10 +679,19 @@ class MapiTUIApp(App[None]):
                     table.move_cursor(row=0)
                 self.notify(f"Operations: Page {self.page_number}/{self.total_pages}")
             else:
-                self.notify(f"Already on the last page ({self.total_pages}/{self.total_pages})", severity="information")
+                op_id = self._get_selected_operation_id()
+                if op_id:
+                    self._open_operation_page(op_id)
+                else:
+                    self.notify(f"Already on the last page ({self.total_pages}/{self.total_pages})", severity="information")
+        elif self.current_view == "operation_detail":
+            self.notify("Already on Operation Runner page", severity="information")
 
     def action_page_back(self) -> None:
-        if self.current_view == "operations":
+        if self.current_view == "operation_detail":
+            self._close_operation_page()
+            return
+        elif self.current_view == "operations":
             if self.page_number > 1:
                 self.page_number -= 1
                 if self.selected_provider and self.selected_api:
@@ -658,9 +721,24 @@ class MapiTUIApp(App[None]):
         op_id = self._get_selected_operation_id()
         if not op_id:
             return
-        self._inspect_requirements_for_op(self.selected_provider, self.selected_api, op_id)
+        self._inspect_requirements_for_op(self.selected_provider, self.selected_api, op_id, show_popup=True)
 
     def action_call_action(self) -> None:
+        if self.current_view == "operation_detail":
+            try:
+                page = self.query_one(OperationRunnerPage)
+                page.post_message(
+                    OperationRunnerPage.RunRequested(
+                        chk=page.chk,
+                        kwargs=page.get_collected_inputs(),
+                        dry_run=False,
+                        emit_curl=False,
+                    )
+                )
+            except Exception:
+                pass
+            return
+
         if self.current_view != "operations" or not self.selected_provider or not self.selected_api:
             self.notify(
                 "Select an API operation to call (press Enter to explore endpoints, then press 'c')",
@@ -672,7 +750,9 @@ class MapiTUIApp(App[None]):
         if not op_id:
             return
 
-        chk = self._inspect_requirements_for_op(self.selected_provider, self.selected_api, op_id)
+        chk = self._inspect_requirements_for_op(
+            self.selected_provider, self.selected_api, op_id, show_popup=False
+        )
         if not chk:
             return
 
@@ -711,13 +791,14 @@ class MapiTUIApp(App[None]):
         api: str,
         op_id: str,
         kwargs: dict[str, Any] | None = None,
+        show_popup: bool = True,
     ) -> OperationRequirementCheck | None:
         pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
         status_text = self.query_one("#status_text", Static)
         try:
             chk = check_operation_requirements(self.client, provider, api, op_id, kwargs=kwargs)
         except Exception:
-            self._inspect_operation_fallback(op_id)
+            self._inspect_operation_fallback(op_id, show_popup=show_popup)
             return None
 
         if chk.required_parameters:
@@ -753,28 +834,34 @@ class MapiTUIApp(App[None]):
             f"{auth_display}"
         )
 
-        notify_lines = [
-            f"{chk.method} {chk.path} (ID: {chk.operation_id})",
-            f"Required: {', '.join([p.name for p in chk.required_parameters]) or 'None'}",
-            f"Auth: {chk.auth.message}",
-            f"Status: {'Ready' if chk.can_execute else 'Missing inputs'}",
-            f"Call: {chk.example_call}",
-        ]
-        self.notify(
-            "\n".join(notify_lines),
-            title=f"Operation: {chk.operation_id}",
-            timeout=8,
-        )
+        if show_popup:
+            notify_lines = [
+                f"{chk.method} {chk.path} (ID: {chk.operation_id})",
+                f"Required: {', '.join([p.name for p in chk.required_parameters]) or 'None'}",
+                f"Auth: {chk.auth.message}",
+                f"Status: {'Ready' if chk.can_execute else 'Missing inputs'}",
+                f"Call: {chk.example_call}",
+            ]
+            self.notify(
+                "\n".join(notify_lines),
+                title=f"Operation: {chk.operation_id}",
+                timeout=8,
+            )
         return chk
 
     def _inspect_operation_by_id(self, op_id: str) -> None:
         if self.selected_provider and self.selected_api:
-            chk = self._inspect_requirements_for_op(self.selected_provider, self.selected_api, op_id)
+            chk = self._inspect_requirements_for_op(
+                self.selected_provider,
+                self.selected_api,
+                op_id,
+                show_popup=True,
+            )
             if chk:
                 return
-        self._inspect_operation_fallback(op_id)
+        self._inspect_operation_fallback(op_id, show_popup=True)
 
-    def _inspect_operation_fallback(self, op_id: str) -> None:
+    def _inspect_operation_fallback(self, op_id: str, show_popup: bool = True) -> None:
         op_item = next((op for op in self._current_operations if op["id"] == op_id), None)
         if not op_item:
             return
@@ -804,11 +891,148 @@ class MapiTUIApp(App[None]):
             f"Params: [dim]{escape(params_display)}[/] • "
             f"[italic {pal.text_muted}]{escape(summary)}[/]"
         )
-        self.notify(
-            f"{m} {path}\nOp: {op_name}\nParams: {params_display}\n{summary}",
-            title=f"Operation: {op_name}",
-            timeout=6,
+        if show_popup:
+            self.notify(
+                f"{m} {path}\nOp: {op_name}\nParams: {params_display}\n{summary}",
+                title=f"Operation: {op_name}",
+                timeout=6,
+            )
+
+    def _open_operation_page(
+        self,
+        op_id: str,
+        initial_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        if not self.selected_provider or not self.selected_api:
+            return
+
+        chk = self._inspect_requirements_for_op(
+            self.selected_provider,
+            self.selected_api,
+            op_id,
+            kwargs=initial_kwargs,
+            show_popup=False,
         )
+        if not chk:
+            return
+
+        table = self.query_one("#catalog_table", DataTable)
+        table.styles.display = "none"
+
+        container = self.query_one("#operation_runner_container", Vertical)
+        container.remove_children()
+
+        page = OperationRunnerPage(
+            chk=chk,
+            is_dark=self.is_dark,
+            initial_kwargs=initial_kwargs,
+        )
+        container.mount(page)
+        container.styles.display = "block"
+
+        self.current_view = "operation_detail"
+        self.selected_operation = op_id
+
+        pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+        status_text = self.query_one("#status_text", Static)
+        status_text.update(
+            f"[bold {pal.secondary}]{escape(chk.provider)}/{escape(chk.api)}:[/] "
+            f"ID: [bold {pal.text}]{escape(chk.operation_id)}[/] • "
+            f"[dim]Fill in inputs and press Run Request or Ctrl+← to return.[/]"
+        )
+
+        self._focus_first_input(page)
+
+    def _focus_first_input(self, page: OperationRunnerPage) -> None:
+        if page.chk.required_parameters:
+            first_p = page.chk.required_parameters[0]
+            with contextlib.suppress(Exception):
+                page.query_one(f"#op_input_{first_p.name}", Input).focus()
+                return
+        elif page.chk.optional_parameters:
+            first_p = page.chk.optional_parameters[0]
+            with contextlib.suppress(Exception):
+                page.query_one(f"#op_input_{first_p.name}", Input).focus()
+                return
+        with contextlib.suppress(Exception):
+            page.query_one("#btn_run", Button).focus()
+
+    def _close_operation_page(self) -> None:
+        if self.current_view != "operation_detail":
+            return
+
+        container = self.query_one("#operation_runner_container", Vertical)
+        container.styles.display = "none"
+        container.remove_children()
+
+        table = self.query_one("#catalog_table", DataTable)
+        table.styles.display = "block"
+
+        self.current_view = "operations"
+
+        if self.selected_operation:
+            try:
+                row_idx = table.get_row_index(self.selected_operation)
+                table.move_cursor(row=row_idx)
+            except Exception:
+                pass
+
+        table.focus()
+
+        pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+        status_text = self.query_one("#status_text", Static)
+        p_name = self.selected_provider or ""
+        a_name = self.selected_api or ""
+        total_ops = len(self._current_operations)
+        start_idx = (self.page_number - 1) * self.page_size
+        end_idx = min(start_idx + self.page_size, total_ops)
+        range_str = f"{start_idx + 1}-{end_idx} of {total_ops}" if total_ops > 0 else "0 operations"
+        status_text.update(
+            f"[bold {pal.secondary}]{escape(p_name)}/{escape(a_name)}:[/] "
+            f"Page [bold {pal.primary}]{self.page_number}[/] of [bold]{self.total_pages}[/] "
+            f"({range_str}). "
+            f"[dim]Ctrl+← / Ctrl+→: pages • ↑/↓: cursor • Enter: open page • c: call[/]"
+        )
+        self.notify("Returned to operations list")
+
+    def on_operation_runner_page_run_requested(
+        self,
+        event: OperationRunnerPage.RunRequested,
+    ) -> None:
+        chk = check_operation_requirements(
+            self.client,
+            event.chk.provider,
+            event.chk.api,
+            event.chk.operation_id,
+            kwargs=event.kwargs,
+        )
+
+        if not chk.can_execute and not (event.dry_run or event.emit_curl):
+            try:
+                page = self.query_one(OperationRunnerPage)
+                page.display_error(
+                    chk.status_summary,
+                    f"{chk.provider}/{chk.api}/{chk.operation_id}",
+                )
+            except Exception:
+                pass
+            status_text = self.query_one("#status_text", Static)
+            status_text.update(f"[bold red]Cannot Call:[/] {chk.status_summary}")
+            self.notify(chk.status_summary, title="Requirements Not Met", severity="warning")
+            return
+
+        self._run_call(
+            chk=chk,
+            kwargs=event.kwargs,
+            dry_run=event.dry_run,
+            emit_curl=event.emit_curl,
+        )
+
+    def on_operation_runner_page_back_requested(
+        self,
+        event: OperationRunnerPage.BackRequested,
+    ) -> None:
+        self._close_operation_page()
 
     def _handle_call_command(self, cmd_str: str) -> None:
         tokens = cmd_str.split()
@@ -837,7 +1061,7 @@ class MapiTUIApp(App[None]):
                     provider = parts[0]
                     api = parts[1]
                     args_tokens = args_tokens[1:]
-            elif self.current_view == "operations":
+            elif self.current_view in ("operations", "operation_detail"):
                 matching_op = next(
                     (
                         op["id"]
@@ -850,8 +1074,11 @@ class MapiTUIApp(App[None]):
                     target_op = matching_op
                     args_tokens = args_tokens[1:]
 
-        if not target_op and self.current_view == "operations":
-            target_op = self._get_selected_operation_id()
+        if not target_op:
+            if self.current_view == "operation_detail":
+                target_op = self.selected_operation
+            elif self.current_view == "operations":
+                target_op = self._get_selected_operation_id()
 
         if not provider or not api or not target_op:
             self.notify(
@@ -867,12 +1094,30 @@ class MapiTUIApp(App[None]):
             self.notify(f"Could not load operation '{target_op}': {exc}", severity="error")
             return
 
-        kwargs = parse_operation_call_args(args_tokens, params_spec=temp_chk.parameters)
+        form_kwargs: dict[str, Any] = {}
+        if self.current_view == "operation_detail":
+            try:
+                page = self.query_one(OperationRunnerPage)
+                form_kwargs = page.get_collected_inputs()
+            except Exception:
+                pass
+
+        parsed_kwargs = parse_operation_call_args(args_tokens, params_spec=temp_chk.parameters)
+        kwargs = {**form_kwargs, **parsed_kwargs}
         chk = check_operation_requirements(self.client, provider, api, target_op, kwargs=kwargs)
 
         if not chk.can_execute and not (dry_run or emit_curl):
             status_text = self.query_one("#status_text", Static)
             status_text.update(f"[bold red]Cannot Call:[/] {chk.status_summary}")
+            if self.current_view == "operation_detail":
+                try:
+                    page = self.query_one(OperationRunnerPage)
+                    page.display_error(
+                        chk.status_summary,
+                        f"{chk.provider}/{chk.api}/{chk.operation_id}",
+                    )
+                except Exception:
+                    pass
             self.notify(chk.status_summary, title="Requirements Not Met", severity="warning")
             return
 
@@ -898,6 +1143,13 @@ class MapiTUIApp(App[None]):
             f"[bold cyan]{action_name}:[/] [bold]{call_target}[/]({kwargs_desc})...",
         )
 
+        runner_page = None
+        try:
+            runner_page = self.query_one(OperationRunnerPage)
+            self.call_from_thread(runner_page.set_executing, f"{action_name}...")
+        except Exception:
+            pass
+
         pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
 
         try:
@@ -915,12 +1167,22 @@ class MapiTUIApp(App[None]):
                     f"[bold green]cURL:[/] {escape(curl_cmd)}",
                 )
                 self.notify(f"cURL ready for {chk.operation_id}", title="cURL Generated")
+                if runner_page:
+                    self.call_from_thread(
+                        runner_page.display_result,
+                        res,
+                        call_target,
+                        None,
+                        True,
+                    )
             elif dry_run and isinstance(res, RequestConfig):
                 self.call_from_thread(
                     status_text.update,
                     f"[bold green]✓ Dry-Run:[/] {res.method} {escape(res.url)} • Headers: {len(res.headers)}",
                 )
                 self.notify(f"Dry run ready: {res.method} {res.url}", title="Dry Run")
+                if runner_page:
+                    self.call_from_thread(runner_page.display_result, res, f"Dry-Run {call_target}")
             elif isinstance(res, MapiResult):
                 status_code = getattr(res.metadata, "http_status", 200) or 200
                 duration_ms = getattr(res.metadata, "duration_ms", 0)
@@ -944,6 +1206,8 @@ class MapiTUIApp(App[None]):
                     title=f"Call Succeeded: {chk.operation_id}",
                     timeout=8,
                 )
+                if runner_page:
+                    self.call_from_thread(runner_page.display_result, res, call_target, duration_ms)
         except Exception as exc:
             err_msg = str(exc)
             self.call_from_thread(
@@ -951,11 +1215,20 @@ class MapiTUIApp(App[None]):
                 f"[bold red]✗ Call Failed:[/] {escape(err_msg)}",
             )
             self.notify(f"Call failed: {err_msg}", title="Call Error", severity="error")
+            if runner_page:
+                self.call_from_thread(runner_page.display_error, err_msg, call_target)
         finally:
             self.call_from_thread(self.set_loading, False)
             self._is_busy = False
 
     def _show_operations_for(self, provider: str, api: str | None = None) -> None:
+        if self.current_view == "operation_detail":
+            container = self.query_one("#operation_runner_container", Vertical)
+            container.styles.display = "none"
+            container.remove_children()
+            table = self.query_one("#catalog_table", DataTable)
+            table.styles.display = "block"
+
         status_text = self.query_one("#status_text", Static)
         try:
             if "/" in provider and not api:

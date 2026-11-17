@@ -74,7 +74,8 @@ def _download_and_compile(
         raw_bytes = resp.content or b""
 
         # Write to temporary file for pipeline processing
-        with tempfile.NamedTemporaryFile(suffix=".spec", delete=False) as tmp:
+        suffix = ".yaml" if (spec_url and spec_url.lower().endswith((".yaml", ".yml"))) else ".json"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(raw_bytes)
             tmp_path = Path(tmp.name)
 

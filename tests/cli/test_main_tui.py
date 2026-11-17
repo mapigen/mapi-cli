@@ -8,6 +8,7 @@ from mapi_cli.paths import resolve_data_dir
 from mapi_cli.ui.banner import MAPI_ASCII_ART, render_banner
 from mapi_cli.ui.command_palette import filter_commands
 from mapi_cli.ui.main_tui import MapiTUIApp
+from mapi_cli.ui.operation_view import OperationRunnerPage
 
 
 def test_banner_rendering():
@@ -100,11 +101,20 @@ async def test_main_tui_operations_view_and_inspection():
         assert app.current_view == "operations"
         assert table.row_count > 0
 
-        # Press Enter to inspect operation
+        # Press Enter to expand operation into dedicated page
         await pilot.press("enter")
         await pilot.pause()
+        assert app.current_view == "operation_detail"
+        runner_page = pilot.app.query_one(OperationRunnerPage)
+        assert runner_page is not None
         status_text = pilot.app.query_one("#status_text")
         assert "ID:" in str(status_text.render())
+
+        # Return to operations list via Ctrl+Left
+        await pilot.press("ctrl+left")
+        await pilot.pause()
+        assert app.current_view == "operations"
+        assert table.row_count > 0
 
         # Test filtering operations
         sample_term = app._current_operations[0]["id"][:4]
@@ -297,5 +307,88 @@ async def test_main_tui_page_navigation_and_cursor_isolation():
         await pilot.press("enter")
         await pilot.pause()
         assert app.page_number == 1
+
+
+@pytest.mark.asyncio
+async def test_main_tui_operation_runner_page_interaction():
+    """Verify expanding operation into runner page, filling inputs, dry-run, curl, and returning."""
+    from textual.widgets import Button
+
+    data_dir, _ = resolve_data_dir()
+    client = Mapi(data_dir=data_dir)
+    app = MapiTUIApp(client=client, data_dir=data_dir)
+
+    async with app.run_test() as pilot:
+        table = pilot.app.query_one("#catalog_table", DataTable)
+        assert app.current_view == "providers"
+
+        # 1. Enter operations view for pokeapi
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.current_view == "operations"
+
+        # Highlight ability_retrieve
+        table.move_cursor(row=2)
+        await pilot.pause()
+        selected_op_id = app.selected_operation
+
+        # 2. Press Enter to expand into Operation Runner Page
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.current_view == "operation_detail"
+
+        runner_page = pilot.app.query_one(OperationRunnerPage)
+        assert runner_page is not None
+
+        # Check operation header details
+        header_static = runner_page.query_one("#op_header_static")
+        header_text = str(header_static.render())
+        assert "ability_retrieve" in header_text
+        assert "GET" in header_text
+
+        # Check parameter inputs form
+        id_input = runner_page.query_one("#op_input_id", Input)
+        assert id_input is not None
+        assert id_input.value == ""
+
+        # 3. Test missing parameters validation on Run button
+        btn_run = runner_page.query_one("#btn_run", Button)
+        btn_run.action_press()
+        await pilot.pause()
+
+        result_header = runner_page.query_one("#op_result_header")
+        result_body = runner_page.query_one("#op_result_body")
+        assert "Request Failed" in str(result_header.render())
+        assert "Missing argument(s)" in str(result_body.render())
+
+        # 4. Fill in the requirement (id=1)
+        id_input.value = "1"
+        await pilot.pause()
+
+        collected = runner_page.get_collected_inputs()
+        assert collected.get("id") == "1"
+
+        # 5. Click Dry-Run button
+        btn_dry = runner_page.query_one("#btn_dry", Button)
+        btn_dry.action_press()
+        await pilot.pause(0.2)
+        assert "Dry-Run Prepared" in str(result_header.render())
+        assert "https://pokeapi.co/api/v2/ability/1" in str(result_body.render())
+
+        # 6. Click cURL button
+        btn_curl = runner_page.query_one("#btn_curl", Button)
+        btn_curl.action_press()
+        await pilot.pause(0.2)
+        assert "cURL Command Generated" in str(result_header.render())
+        assert "curl" in str(result_body.render()).lower()
+
+        # 7. Click Back button to return to operations list
+        btn_back = runner_page.query_one("#btn_back", Button)
+        btn_back.action_press()
+        await pilot.pause()
+        assert app.current_view == "operations"
+        assert table.has_focus
+        assert app.selected_operation == selected_op_id
+
 
 

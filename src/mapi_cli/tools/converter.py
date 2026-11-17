@@ -19,11 +19,14 @@ def normalize_spec(
 
     if compressed_content is not None:
         decompressed = decompress_zstd(compressed_content)
-        return msgspec.json.decode(decompressed)
+        try:
+            return msgspec.json.decode(decompressed)
+        except Exception:
+            return yaml.safe_load(decompressed)
     elif path:
         content = path.read_bytes()
-        if path.suffix in (".yaml", ".yml"):
-            return yaml.safe_load(content)
-        else:
+        try:
             return msgspec.json.decode(content)
+        except Exception:
+            return yaml.safe_load(content)
     return {}

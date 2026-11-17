@@ -152,6 +152,86 @@ def build_app_tcss(
         display: none;
     }}
 
+    /* Operation Detail & Interactive Request Page */
+    #operation_runner_container {{
+        height: 1fr;
+        display: none;
+        background: {dark.surface};
+    }}
+
+    OperationRunnerPage {{
+        height: 1fr;
+        padding: 0 1;
+        background: {dark.surface};
+    }}
+
+    .op-card {{
+        margin: 1 0 0 0;
+        padding: 1;
+        background: {dark.bg};
+        border: round {dark.border};
+        height: auto;
+    }}
+
+    .op-section-title {{
+        text-style: bold;
+        margin-bottom: 1;
+    }}
+
+    .op-group-title {{
+        margin: 1 0 0 0;
+        text-style: bold;
+    }}
+
+    .op-param-label {{
+        margin: 1 0 0 0;
+    }}
+
+    .op-param-desc {{
+        color: {dark.text_muted};
+        margin-bottom: 1;
+    }}
+
+    .op-param-input {{
+        margin: 0 0 1 0;
+        height: 3;
+        background: {dark.bg};
+        border: round {dark.border};
+        color: {dark.text};
+    }}
+
+    .op-param-input:focus {{
+        border: round {dark.border_focus};
+    }}
+
+    #op_button_bar {{
+        height: auto;
+        margin: 1 0;
+        align-horizontal: left;
+    }}
+
+    #op_button_bar Button {{
+        margin-right: 1;
+        height: 3;
+    }}
+
+    #op_result_card {{
+        margin: 1 0 1 0;
+        padding: 1;
+        border: round {dark.border};
+        background: {dark.bg};
+        height: auto;
+        min-height: 8;
+    }}
+
+    #op_result_header {{
+        margin-bottom: 1;
+    }}
+
+    #op_result_body {{
+        height: auto;
+    }}
+
     /* =========================================================================
        2. Light Mode Overrides (.light-mode)
        ========================================================================= */
@@ -251,5 +331,37 @@ def build_app_tcss(
 
     Screen.light-mode #loader {{
         color: {light.secondary};
+    }}
+
+    Screen.light-mode #operation_runner_container {{
+        background: {light.surface};
+    }}
+
+    Screen.light-mode OperationRunnerPage {{
+        background: {light.surface};
+    }}
+
+    Screen.light-mode .op-card {{
+        background: {light.bg};
+        border: round {light.border};
+    }}
+
+    Screen.light-mode .op-param-desc {{
+        color: {light.text_muted};
+    }}
+
+    Screen.light-mode .op-param-input {{
+        background: {light.bg};
+        border: round {light.border};
+        color: {light.text};
+    }}
+
+    Screen.light-mode .op-param-input:focus {{
+        border: round {light.border_focus};
+    }}
+
+    Screen.light-mode #op_result_card {{
+        border: round {light.border};
+        background: {light.bg};
     }}
     """.strip()

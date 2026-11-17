@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any
 
 import msgspec
@@ -45,7 +46,9 @@ def extract_service_data(
                     continue
                 op_id = details_dict.get("operationId")
                 if not op_id:
-                    continue
+                    clean_p = re.sub(r"[{}]", "", _path).strip("/")
+                    clean_p = re.sub(r"[^a-zA-Z0-9]+", "_", clean_p).strip("_")
+                    op_id = f"{method.lower()}_{clean_p}" if clean_p else method.lower()
 
                 op_params = get_params_from_operation(details_dict, path_level_params, spec)
                 hashes = []
@@ -82,7 +85,9 @@ def extract_service_data(
                     continue
                 op_id = details_dict.get("operationId")
                 if not op_id:
-                    continue
+                    clean_p = re.sub(r"[{}]", "", path).strip("/")
+                    clean_p = re.sub(r"[^a-zA-Z0-9]+", "_", clean_p).strip("_")
+                    op_id = f"{method.lower()}_{clean_p}" if clean_p else method.lower()
 
                 final_params: list[ParameterUnion] = []
                 seen: set[str] = set()
