@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from mapi.models.request import RequestConfig
+from mapi.models.response import MapiResult
 from rich.markup import escape
 from rich.text import Text
 from textual import events, work
@@ -21,6 +23,12 @@ from textual.widgets import (
 from textual.widgets.option_list import Option
 
 from mapi_cli.commands.download import _download_and_compile, _is_api_local
+from mapi_cli.operations import (
+    OperationRequirementCheck,
+    check_operation_requirements,
+    execute_operation_call,
+    parse_operation_call_args,
+)
 from mapi_cli.paths import resolve_data_dir
 from mapi_cli.ui.banner import render_banner
 from mapi_cli.ui.command_palette import filter_commands
@@ -36,14 +44,17 @@ class MapiTUIApp(App[None]):
         - MAPI ASCII text art header
         - Interactive provider & API exploration
         - Seamless spec downloads
+        - Direct operation call execution with requirement & auth inspection
     """
 
     TITLE = "MAPI"
-    SUB_TITLE = "Type '/' for commands • Arrow keys to navigate • Enter to inspect/download • t: theme"
+    SUB_TITLE = "Type '/' for commands • Enter: inspect • c: call • i: requirements • t: theme"
     CSS = build_app_tcss()
 
     BINDINGS = [
         Binding("enter", "select_row", "Select / Inspect"),
+        Binding("c", "call_action", "Call Endpoint"),
+        Binding("i", "inspect_action", "Inspect Reqs & Auth"),
         Binding("slash", "focus_command_palette", "Commands / Search", key_display="/"),
         Binding("t", "toggle_theme", "Toggle Celadon Theme"),
         Binding("d", "download_selected", "Download"),
@@ -70,6 +81,8 @@ class MapiTUIApp(App[None]):
         self.current_view: str = "providers"  # "providers" or "operations"
         self.selected_provider: str | None = None
         self.selected_api: str | None = None
+        self.selected_operation: str | None = None
+        self._current_filter: str = ""
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -226,7 +239,8 @@ class MapiTUIApp(App[None]):
         if event.input.id == "command_input":
             val = event.value
             self._update_suggestions(val)
-            if not val.startswith("/"):
+            if not val.startswith("/") and val != self._current_filter:
+                self._current_filter = val
                 if self.current_view == "operations":
                     self._populate_operations(query=val)
                 else:
@@ -320,6 +334,7 @@ class MapiTUIApp(App[None]):
     def _execute_command(self, cmd_str: str) -> None:
         container = self.query_one("#suggestions_container", Vertical)
         container.styles.display = "none"
+        self._current_filter = ""
         input_widget = self.query_one("#command_input", Input)
         input_widget.value = ""
 
@@ -356,10 +371,21 @@ class MapiTUIApp(App[None]):
             else:
                 self._populate_catalog(query=query_term)
                 self.notify(f"Filtering catalog by '{query_term}'" if query_term else "Cleared catalog filter")
+        elif root_cmd in ("/call", "/run", "/execute", "/dry-run", "/dry", "/curl"):
+            self._handle_call_command(cmd_str)
+        elif root_cmd in ("/inspect", "/reqs", "/params"):
+            if len(tokens) > 1:
+                target_op = tokens[1]
+                if self.selected_provider and self.selected_api:
+                    self._inspect_requirements_for_op(self.selected_provider, self.selected_api, target_op)
+                else:
+                    self.notify("Open an API to inspect operations", severity="warning")
+            else:
+                self.action_inspect_action()
         elif root_cmd in ("/help", "/?"):
             self.notify(
-                "Commands: /apis, /ops, /download, /search, /theme, /refresh, /quit\n"
-                "Shortcuts: / (commands), d (download), a (all), t (theme), b/Esc (back), q (quit)",
+                "Commands: /call, /dry-run, /curl, /inspect, /apis, /ops, /download, /search, /theme, /quit\n"
+                "Shortcuts: c (call), i (inspect), Enter (select/reqs), d (download), / (palette), t (theme), b/Esc (back)",
                 title="MAPI Help",
                 timeout=8,
             )
@@ -378,6 +404,8 @@ class MapiTUIApp(App[None]):
         self.current_view = "providers"
         self.selected_provider = None
         self.selected_api = None
+        self.selected_operation = None
+        self._current_filter = ""
         input_widget = self.query_one("#command_input", Input)
         input_widget.value = ""
         self._setup_catalog_columns()
@@ -465,20 +493,151 @@ class MapiTUIApp(App[None]):
                 provider, api = key_str.split("/", 1)
                 self._show_operations_for(provider, api)
         else:
+            self.selected_operation = key_str
             self._inspect_operation_by_id(key_str)
 
-    def action_inspect_operation(self) -> None:
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if self.current_view == "operations" and event.row_key:
+            self.selected_operation = str(getattr(event.row_key, "value", event.row_key))
+
+    def _get_selected_operation_id(self) -> str | None:
         table = self.query_one("#catalog_table", DataTable)
-        if table.row_count == 0:
+        if table.row_count > 0:
+            coordinate = table.cursor_coordinate
+            row_key_obj = table.coordinate_to_cell_key(coordinate).row_key
+            if row_key_obj:
+                key_str = str(getattr(row_key_obj, "value", row_key_obj))
+                self.selected_operation = key_str
+                return key_str
+        return self.selected_operation
+
+    def action_inspect_action(self) -> None:
+        if self.current_view != "operations" or not self.selected_provider or not self.selected_api:
+            self.notify(
+                "Open an API operation to inspect requirements (press Enter on an API)",
+                severity="warning",
+            )
             return
-        coordinate = table.cursor_coordinate
-        row_key_obj = table.coordinate_to_cell_key(coordinate).row_key
-        if not row_key_obj:
+        op_id = self._get_selected_operation_id()
+        if not op_id:
             return
-        key_str = str(getattr(row_key_obj, "value", row_key_obj))
-        self._inspect_operation_by_id(key_str)
+        self._inspect_requirements_for_op(self.selected_provider, self.selected_api, op_id)
+
+    def action_call_action(self) -> None:
+        if self.current_view != "operations" or not self.selected_provider or not self.selected_api:
+            self.notify(
+                "Select an API operation to call (press Enter to explore endpoints, then press 'c')",
+                severity="warning",
+            )
+            return
+
+        op_id = self._get_selected_operation_id()
+        if not op_id:
+            return
+
+        chk = self._inspect_requirements_for_op(self.selected_provider, self.selected_api, op_id)
+        if not chk:
+            return
+
+        input_widget = self.query_one("#command_input", Input)
+        if chk.missing_parameters:
+            arg_hints = " ".join([f"{p.name}=" for p in chk.missing_parameters])
+            input_widget.value = f"/call {arg_hints}"
+            input_widget.focus()
+            input_widget.cursor_position = len(input_widget.value)
+            self.notify(
+                f"Enter required parameters: {', '.join([p.name for p in chk.missing_parameters])}",
+                title="Arguments Required",
+                severity="warning",
+            )
+        elif chk.auth.is_required and not chk.auth.is_configured:
+            input_widget.value = "/call token="
+            input_widget.focus()
+            input_widget.cursor_position = len(input_widget.value)
+            self.notify(
+                f"Authentication required. Enter token or set {chk.auth.env_var_name}",
+                title="Auth Required",
+                severity="warning",
+            )
+        else:
+            input_widget.value = "/call "
+            input_widget.focus()
+            input_widget.cursor_position = len(input_widget.value)
+            self.notify(
+                f"Ready to call {chk.operation_id}. Press Enter to execute or type additional args.",
+                title="Ready to Call",
+            )
+
+    def _inspect_requirements_for_op(
+        self,
+        provider: str,
+        api: str,
+        op_id: str,
+        kwargs: dict[str, Any] | None = None,
+    ) -> OperationRequirementCheck | None:
+        pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+        status_text = self.query_one("#status_text", Static)
+        try:
+            chk = check_operation_requirements(self.client, provider, api, op_id, kwargs=kwargs)
+        except Exception:
+            self._inspect_operation_fallback(op_id)
+            return None
+
+        if chk.required_parameters:
+            req_list = [
+                f"[bold red]{escape(p.name)}[/]({p.in_}:{p.type_str})"
+                for p in chk.required_parameters
+            ]
+            req_str = ", ".join(req_list)
+        else:
+            req_str = "[dim]None[/]"
+
+        if chk.optional_parameters:
+            opt_list = [f"{escape(p.name)}({p.in_}:{p.type_str})" for p in chk.optional_parameters]
+            opt_str = ", ".join(opt_list[:4])
+            if len(opt_list) > 4:
+                opt_str += f" (+{len(opt_list) - 4} more)"
+        else:
+            opt_str = "[dim]None[/]"
+
+        auth_msg = chk.auth.message
+        if chk.auth.is_required and not chk.auth.is_configured:
+            auth_display = f"[bold yellow]Auth:[/] {escape(auth_msg)}"
+        elif chk.auth.is_required:
+            auth_display = f"[bold green]Auth:[/] {escape(auth_msg)}"
+        else:
+            auth_display = f"[dim]Auth:[/] {escape(auth_msg)}"
+
+        status_text.update(
+            f"[bold green]{escape(chk.method)}[/] [bold {pal.secondary}]{escape(chk.path)}[/] • "
+            f"ID: [bold {pal.text}]{escape(chk.operation_id)}[/] • "
+            f"[bold]Req:[/] {req_str} • "
+            f"[dim]Opt:[/] {opt_str} • "
+            f"{auth_display}"
+        )
+
+        notify_lines = [
+            f"{chk.method} {chk.path} (ID: {chk.operation_id})",
+            f"Required: {', '.join([p.name for p in chk.required_parameters]) or 'None'}",
+            f"Auth: {chk.auth.message}",
+            f"Status: {'Ready' if chk.can_execute else 'Missing inputs'}",
+            f"Call: {chk.example_call}",
+        ]
+        self.notify(
+            "\n".join(notify_lines),
+            title=f"Operation: {chk.operation_id}",
+            timeout=8,
+        )
+        return chk
 
     def _inspect_operation_by_id(self, op_id: str) -> None:
+        if self.selected_provider and self.selected_api:
+            chk = self._inspect_requirements_for_op(self.selected_provider, self.selected_api, op_id)
+            if chk:
+                return
+        self._inspect_operation_fallback(op_id)
+
+    def _inspect_operation_fallback(self, op_id: str) -> None:
         op_item = next((op for op in self._current_operations if op["id"] == op_id), None)
         if not op_item:
             return
@@ -513,6 +672,151 @@ class MapiTUIApp(App[None]):
             title=f"Operation: {op_name}",
             timeout=6,
         )
+
+    def _handle_call_command(self, cmd_str: str) -> None:
+        tokens = cmd_str.split()
+        if not tokens:
+            return
+        root_cmd = tokens[0].lower()
+        dry_run = root_cmd in ("/dry-run", "/dry")
+        emit_curl = root_cmd == "/curl"
+
+        args_tokens = tokens[1:]
+
+        provider = self.selected_provider
+        api = self.selected_api
+        target_op = None
+
+        if args_tokens and not args_tokens[0].startswith("-") and "=" not in args_tokens[0]:
+            candidate = args_tokens[0]
+            if "/" in candidate:
+                parts = candidate.strip("/").split("/")
+                if len(parts) >= 3:
+                    provider = parts[0]
+                    api = parts[1]
+                    target_op = parts[2]
+                    args_tokens = args_tokens[1:]
+                elif len(parts) == 2:
+                    provider = parts[0]
+                    api = parts[1]
+                    args_tokens = args_tokens[1:]
+            elif self.current_view == "operations":
+                matching_op = next(
+                    (
+                        op["id"]
+                        for op in self._current_operations
+                        if op["id"] == candidate or op["operation_id"] == candidate
+                    ),
+                    None,
+                )
+                if matching_op:
+                    target_op = matching_op
+                    args_tokens = args_tokens[1:]
+
+        if not target_op and self.current_view == "operations":
+            target_op = self._get_selected_operation_id()
+
+        if not provider or not api or not target_op:
+            self.notify(
+                "Specify target operation (e.g. /call pokeapi/REST/pokemon_retrieve id=25) "
+                "or open an operation in the TUI.",
+                severity="warning",
+            )
+            return
+
+        try:
+            temp_chk = check_operation_requirements(self.client, provider, api, target_op)
+        except Exception as exc:
+            self.notify(f"Could not load operation '{target_op}': {exc}", severity="error")
+            return
+
+        kwargs = parse_operation_call_args(args_tokens, params_spec=temp_chk.parameters)
+        chk = check_operation_requirements(self.client, provider, api, target_op, kwargs=kwargs)
+
+        if not chk.can_execute and not (dry_run or emit_curl):
+            status_text = self.query_one("#status_text", Static)
+            status_text.update(f"[bold red]Cannot Call:[/] {chk.status_summary}")
+            self.notify(chk.status_summary, title="Requirements Not Met", severity="warning")
+            return
+
+        self._run_call(chk, kwargs, dry_run=dry_run, emit_curl=emit_curl)
+
+    @work(thread=True, exclusive=True)
+    def _run_call(
+        self,
+        chk: OperationRequirementCheck,
+        kwargs: dict[str, Any],
+        dry_run: bool = False,
+        emit_curl: bool = False,
+    ) -> None:
+        self._is_busy = True
+        status_text = self.query_one("#status_text", Static)
+        self.call_from_thread(self.set_loading, True)
+
+        call_target = f"{chk.provider}/{chk.api}/{chk.operation_id}"
+        kwargs_desc = ", ".join(f"{k}={v}" for k, v in kwargs.items())
+        action_name = "Dry-run" if dry_run else ("cURL" if emit_curl else "Calling")
+        self.call_from_thread(
+            status_text.update,
+            f"[bold cyan]{action_name}:[/] [bold]{call_target}[/]({kwargs_desc})...",
+        )
+
+        pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+
+        try:
+            res = execute_operation_call(
+                self.client,
+                chk,
+                kwargs,
+                dry_run=dry_run,
+                emit_curl=emit_curl,
+            )
+            if emit_curl and isinstance(res, RequestConfig):
+                curl_cmd = res.to_curl()
+                self.call_from_thread(
+                    status_text.update,
+                    f"[bold green]cURL:[/] {escape(curl_cmd)}",
+                )
+                self.notify(f"cURL ready for {chk.operation_id}", title="cURL Generated")
+            elif dry_run and isinstance(res, RequestConfig):
+                self.call_from_thread(
+                    status_text.update,
+                    f"[bold green]✓ Dry-Run:[/] {res.method} {escape(res.url)} • Headers: {len(res.headers)}",
+                )
+                self.notify(f"Dry run ready: {res.method} {res.url}", title="Dry Run")
+            elif isinstance(res, MapiResult):
+                status_code = getattr(res.metadata, "http_status", 200) or 200
+                duration_ms = getattr(res.metadata, "duration_ms", 0)
+                data = res.data
+                if isinstance(data, dict):
+                    data_summary = ", ".join(
+                        f"{k}={repr(v)[:24]}" for k, v in list(data.items())[:4]
+                    )
+                elif isinstance(data, list):
+                    data_summary = f"list of {len(data)} items"
+                else:
+                    data_summary = repr(data)[:80]
+
+                self.call_from_thread(
+                    status_text.update,
+                    f"[bold green]✓ {status_code} OK[/] [dim]({duration_ms}ms)[/] • "
+                    f"[bold {pal.secondary}]{call_target}[/] • [dim]{escape(data_summary)}[/]",
+                )
+                self.notify(
+                    f"{status_code} OK ({duration_ms}ms)\n{data_summary}",
+                    title=f"Call Succeeded: {chk.operation_id}",
+                    timeout=8,
+                )
+        except Exception as exc:
+            err_msg = str(exc)
+            self.call_from_thread(
+                status_text.update,
+                f"[bold red]✗ Call Failed:[/] {escape(err_msg)}",
+            )
+            self.notify(f"Call failed: {err_msg}", title="Call Error", severity="error")
+        finally:
+            self.call_from_thread(self.set_loading, False)
+            self._is_busy = False
 
     def _show_operations_for(self, provider: str, api: str | None = None) -> None:
         status_text = self.query_one("#status_text", Static)

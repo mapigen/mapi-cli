@@ -11,6 +11,42 @@ from mapi_cli.ui.models import CommandItem
 
 DEFAULT_COMMANDS: list[CommandItem] = [
     CommandItem(
+        command="/call",
+        title="Execute API Call",
+        description="Call selected operation with arguments and inspect response (e.g. /call id=25)",
+        category="Execution",
+        shortcut="c",
+        aliases=["/run", "/execute"],
+        handler_action="action_call_operation",
+    ),
+    CommandItem(
+        command="/inspect",
+        title="Inspect Requirements & Auth",
+        description="View required arguments, parameters, types, and auth schemes",
+        category="Discovery",
+        shortcut="i",
+        aliases=["/reqs", "/params"],
+        handler_action="action_inspect_requirements",
+    ),
+    CommandItem(
+        command="/dry-run",
+        title="Dry Run Inspection",
+        description="Prepare and validate operation request without sending network traffic",
+        category="Execution",
+        shortcut="",
+        aliases=["/dry"],
+        handler_action="action_dry_run_operation",
+    ),
+    CommandItem(
+        command="/curl",
+        title="Generate cURL",
+        description="Generate equivalent curl command for the operation",
+        category="Execution",
+        shortcut="",
+        aliases=[],
+        handler_action="action_curl_operation",
+    ),
+    CommandItem(
         command="/apis",
         title="List Providers & APIs",
         description="Browse all available API specifications and local download status",

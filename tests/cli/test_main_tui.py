@@ -148,10 +148,66 @@ async def test_command_palette_arrow_nav_and_execute():
 
         # Tab completion
         await pilot.press("tab")
-        assert input_widget.value.startswith("/apis")
+        assert input_widget.value.startswith(("/call", "/apis"))
 
         # Execute /theme via command palette
         input_widget.value = "/theme"
         await pilot.press("enter")
         await pilot.pause()
         assert app.is_dark is False
+
+
+@pytest.mark.asyncio
+async def test_main_tui_call_and_requirements():
+    """Verify operation requirements inspection, call shortcut 'c', and /call execution in TUI."""
+    data_dir, _ = resolve_data_dir()
+    client = Mapi(data_dir=data_dir)
+    app = MapiTUIApp(client=client, data_dir=data_dir)
+
+    async with app.run_test() as pilot:
+        # Enter operations view for pokeapi
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.current_view == "operations"
+
+        # Highlight ability_retrieve (row 2 in pokeapi REST)
+        table = pilot.app.query_one("#catalog_table", DataTable)
+        table.move_cursor(row=2)
+        await pilot.pause()
+
+        # Press 'i' to inspect requirements
+        await pilot.press("i")
+        await pilot.pause()
+        status_text = pilot.app.query_one("#status_text")
+        render_str = str(status_text.render())
+        assert "ID:" in render_str
+        assert "Req:" in render_str
+
+        # Press 'c' to initiate call (should detect missing 'id' and prefill /call id=)
+        await pilot.press("c")
+        await pilot.pause()
+        input_widget = pilot.app.query_one("#command_input", Input)
+        assert input_widget.has_focus
+        assert "/call id=" in input_widget.value
+
+        # Test dry-run command
+        input_widget.value = "/dry-run id=1"
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert "Dry-Run" in str(status_text.render())
+
+        # Test curl command
+        input_widget.focus()
+        input_widget.value = "/curl id=1"
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert "curl" in str(status_text.render()).lower()
+
+        # Test call rejection when required arguments are missing
+        input_widget.focus()
+        input_widget.value = "/call"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert "Cannot Call:" in str(status_text.render())
+        assert "Missing argument(s)" in str(status_text.render())
+
