@@ -5,51 +5,51 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class CeladonPalette:
-    """Color palette design tokens for Celadon Green theme."""
+    """Color palette design tokens for slim, transparent-shell Celadon Green theme."""
 
     name: str
     is_dark: bool
-    bg: str              # Main canvas background
-    surface: str         # Cards, panels, tables
-    surface_active: str  # Active / focused card surface
-    border: str          # Subtle component borders
-    border_focus: str    # Focus / active borders
-    primary: str         # Primary branding / buttons
-    secondary: str       # Secondary accents / glowing focus
-    accent: str          # Highlights and text accents
-    text: str            # High-contrast readable text
-    text_muted: str      # Subtitles, hints, and secondary text
-    highlight: str       # Row selection cursor highlight
+    bg: str              # "transparent" to respect host terminal emulator theme
+    surface: str         # "transparent" to avoid bulky opaque boxes
+    surface_active: str  # Elevated surface for dropdowns/modals
+    border: str          # Subtle component border
+    border_focus: str    # Focus border (vibrant green)
+    primary: str         # Primary green
+    secondary: str       # Secondary mint/bright green
+    accent: str          # Classic Celadon highlight
+    text: str            # High-contrast readable green text
+    text_muted: str      # Subtitles, hints, and secondary sage text
+    highlight: str       # Table cursor selection highlight
 
 
 CELADON_DARK = CeladonPalette(
     name="Celadon Dark",
     is_dark=True,
-    bg="#111C18",           # Deep Charcoal Green
-    surface="#1B2A25",      # Muted Forest Surface
-    surface_active="#243831",# Elevated Surface
-    border="#2E4A40",       # Celadon Slate Border
-    border_focus="#7EE0D2", # Mint Glow Focus Border
-    primary="#2F847C",      # Celadon Jade Primary
-    secondary="#7EE0D2",    # Mint Glow Accent
-    accent="#ACE1AF",       # Classic Pale Celadon
-    text="#E1F4E2",         # High-contrast Pale Celadon Text
-    text_muted="#7E9F93",   # Soft Sage
-    highlight="#3A6054",    # Table Cursor Selection
+    bg="transparent",       # Inherit user's dark shell background
+    surface="transparent",  # Slim & non-bulky layout
+    surface_active="#1B2A25",# Translucent dark green for menus
+    border="#2E4A40",       # Slim celadon border
+    border_focus="#7EE0D2", # Mint glow focus border
+    primary="#7EE0D2",      # Vibrant mint green
+    secondary="#55FF99",    # Bright terminal green
+    accent="#ACE1AF",       # Classic pale celadon
+    text="#ACE1AF",         # Primary celadon green text
+    text_muted="#7E9F93",   # Soft sage green for secondary text
+    highlight="#1E3A32",    # Subtle table cursor highlight
 )
 
 CELADON_LIGHT = CeladonPalette(
     name="Celadon Light",
     is_dark=False,
-    bg="#F7F4EF",           # Off-White Cream
-    surface="#DDECE6",      # Mist White / Pale Celadon Surface
-    surface_active="#D0E4DC",# Elevated Surface
-    border="#B2D0C5",       # Subtle Sage Border
-    border_focus="#2F847C", # Deep Jade Focus Border
-    primary="#4A7569",      # Celadon Slate Primary
-    secondary="#2F847C",    # Deep Jade Secondary
-    accent="#263832",       # Deep Green Accent
-    text="#263832",         # Deep Slate Green Text
-    text_muted="#5C736B",   # Muted Sage
-    highlight="#C8DFD7",    # Soft Cursor Selection
+    bg="transparent",       # Inherit user's light shell background
+    surface="transparent",  # Slim & non-bulky layout
+    surface_active="#DDECE6",# Translucent light celadon for menus
+    border="#A4C2B7",       # Slim sage border
+    border_focus="#2F847C", # Deep jade focus border
+    primary="#2F847C",      # Deep jade green
+    secondary="#1A524C",    # Deep forest green
+    accent="#263832",       # Slate green accent
+    text="#1B3B32",         # High-contrast dark green text
+    text_muted="#5C7A70",   # Muted sage green
+    highlight="#CCE3DC",    # Soft light green cursor highlight
 )

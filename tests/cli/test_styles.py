@@ -10,12 +10,14 @@ from mapi_cli.ui.styles import (
     status_style,
 )
 
-HEX_COLOR_REGEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+COLOR_TOKEN_REGEX = re.compile(r"^(#[0-9a-fA-F]{6}|transparent)$")
 
 
 def test_palette_token_integrity():
-    """Verify that all CeladonPalette design tokens are valid 6-digit hex color strings."""
+    """Verify that all CeladonPalette design tokens are valid hex or transparent strings."""
     for pal in (CELADON_DARK, CELADON_LIGHT):
+        assert pal.bg == "transparent"
+        assert pal.surface == "transparent"
         for field in (
             pal.bg,
             pal.surface,
@@ -29,7 +31,7 @@ def test_palette_token_integrity():
             pal.text_muted,
             pal.highlight,
         ):
-            assert HEX_COLOR_REGEX.match(field), f"Invalid hex color token '{field}' in {pal.name}"
+            assert COLOR_TOKEN_REGEX.match(field), f"Invalid color token '{field}' in {pal.name}"
 
 
 def test_tcss_generation():

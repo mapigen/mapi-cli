@@ -86,64 +86,43 @@ DEFAULT_COMMANDS: list[CommandItem] = [
 
 
 def filter_commands(query: str) -> list[CommandItem]:
-    """Filter commands dynamically as the user types (prefix, alias, or description match)."""
+    """Filter and rank commands dynamically as the user types (prefix, alias, title, or description match)."""
     q = query.strip().lower()
     if not q or q == "/":
         return DEFAULT_COMMANDS
 
-    matched = []
-    # If starts with '/', strip it for fuzzy matching
-    term = q[1:] if q.startswith("/") else q
+    is_slash = q.startswith("/")
+    term = q[1:] if is_slash else q
 
+    scored: list[tuple[int, CommandItem]] = []
     for cmd in DEFAULT_COMMANDS:
         cmd_bare = cmd.command.lstrip("/")
-        if (
-            cmd_bare.startswith(term)
-            or term in cmd_bare
-            or any(term in alias.lstrip("/") for alias in cmd.aliases)
-            or term in cmd.title.lower()
-            or term in cmd.description.lower()
-        ):
-            matched.append(cmd)
-    return matched
+        score = 0
+        if cmd_bare == term or cmd.command == q:
+            score = 100
+        elif cmd_bare.startswith(term):
+            score = 80
+        elif any(alias.lstrip("/").startswith(term) for alias in cmd.aliases):
+            score = 60
+        elif term in cmd_bare:
+            score = 50
+        elif any(term in alias.lstrip("/") for alias in cmd.aliases):
+            score = 40
+        elif not is_slash or len(term) >= 3:
+            if term in cmd.title.lower():
+                score = 30
+            elif term in cmd.description.lower():
+                score = 20
+
+        if score > 0:
+            scored.append((score, cmd))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [cmd for _, cmd in scored]
 
 
 class CommandPaletteWidget(Widget):
     """Interactive '/' command palette and live search bar."""
-
-    DEFAULT_CSS = """
-    CommandPaletteWidget {
-        height: auto;
-        margin: 0 1;
-        background: transparent;
-    }
-
-    #command_input {
-        width: 100%;
-        border: tall #2E4A40;
-        background: #111C18;
-        color: #E1F4E2;
-    }
-
-    #command_input:focus {
-        border: tall #7EE0D2;
-    }
-
-    #suggestions_container {
-        height: auto;
-        max-height: 8;
-        display: none;
-        background: #1B2A25;
-        border: solid #2E4A40;
-        margin: 0 1;
-    }
-
-    #suggestions_list {
-        background: transparent;
-        height: auto;
-        max-height: 7;
-    }
-    """
 
     def compose(self) -> ComposeResult:
         yield Input(
@@ -168,6 +147,7 @@ class CommandPaletteWidget(Widget):
                     line.append(f"{cmd.title:<24}", style="bold #ACE1AF")
                     line.append(f" {cmd.description}", style="dim #7E9F93")
                     opt_list.add_option(Option(prompt=line, id=cmd.command))
+                opt_list.highlighted = 0
                 container.styles.display = "block"
                 return
         container.styles.display = "none"

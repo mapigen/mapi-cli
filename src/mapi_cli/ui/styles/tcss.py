@@ -7,21 +7,49 @@ def build_app_tcss(
     dark: CeladonPalette = CELADON_DARK,
     light: CeladonPalette = CELADON_LIGHT,
 ) -> str:
-    """Build unified, modular Textual CSS (TCSS) from CeladonPalette design tokens."""
+    """Build unified, slim, modular Textual CSS (TCSS) from CeladonPalette design tokens."""
     return f"""
     /* =========================================================================
-       1. Base Dark Mode Canvas (Default)
+       1. Base Dark Mode Canvas (Transparent shell following user's terminal)
        ========================================================================= */
     Screen {{
         background: {dark.bg};
         color: {dark.text};
     }}
 
+    Header {{
+        dock: top;
+        height: 1;
+        background: {dark.bg};
+        color: {dark.primary};
+    }}
+
+    HeaderTitle {{
+        color: {dark.secondary};
+        text-style: bold;
+    }}
+
+    Footer {{
+        dock: bottom;
+        height: 1;
+        background: {dark.bg};
+    }}
+
+    Footer > .footer--key {{
+        background: {dark.bg};
+        color: {dark.secondary};
+        text-style: bold;
+    }}
+
+    Footer > .footer--description {{
+        color: {dark.text_muted};
+    }}
+
     #header_container {{
         height: auto;
         padding: 0 1;
         background: {dark.surface};
-        border-bottom: heavy {dark.border};
+        border-bottom: none;
     }}
 
     #banner_static {{
@@ -31,19 +59,22 @@ def build_app_tcss(
 
     #path_label {{
         color: {dark.text_muted};
-        padding-top: 0;
+        padding: 0;
+        margin: 0;
     }}
 
-    /* Inputs (Command Palette & Filter) */
+    /* Inputs (Command Palette & Filter) - Slim & Modern */
     #command_input, #filter_input {{
-        margin: 1 0 0 0;
+        margin: 0;
+        padding: 0 1;
         background: {dark.bg};
-        border: tall {dark.border};
+        border: round {dark.border};
         color: {dark.secondary};
+        height: 3;
     }}
 
     #command_input:focus, #filter_input:focus {{
-        border: tall {dark.border_focus};
+        border: round {dark.border_focus};
     }}
 
     /* Suggestions Dropdown */
@@ -51,21 +82,24 @@ def build_app_tcss(
         height: auto;
         max-height: 8;
         display: none;
-        background: {dark.surface};
-        border: solid {dark.border};
+        background: {dark.surface_active};
+        border: round {dark.border_focus};
         margin: 0;
+        padding: 0;
     }}
 
     #suggestions_list {{
         background: transparent;
         height: auto;
         max-height: 7;
+        color: {dark.text};
     }}
 
-    /* Data Tables */
+    /* Data Tables - Slim with host shell transparency */
     #table_container {{
         height: 1fr;
         padding: 0 1;
+        background: {dark.surface};
     }}
 
     #catalog_table, #providers_table {{
@@ -80,29 +114,29 @@ def build_app_tcss(
 
     DataTable > .datatable--cursor {{
         background: {dark.highlight};
-        color: #FFFFFF;
+        color: {dark.secondary};
         text-style: bold;
     }}
 
     DataTable > .datatable--header {{
         background: {dark.surface};
-        color: {dark.secondary};
+        color: {dark.primary};
         text-style: bold;
     }}
 
-    /* Status & Loading Indicator */
+    /* Status & Loading Indicator - Slim 1-row layout */
     #status_panel {{
         height: auto;
-        min-height: 3;
-        max-height: 5;
+        min-height: 1;
+        max-height: 3;
         background: {dark.surface};
-        border-top: heavy {dark.border};
+        border-top: solid {dark.border};
         padding: 0 1;
     }}
 
     #status_text {{
         color: {dark.text_muted};
-        padding-top: 0;
+        padding: 0;
     }}
 
     #loader {{
@@ -119,9 +153,27 @@ def build_app_tcss(
         color: {light.text};
     }}
 
+    Screen.light-mode Header {{
+        background: {light.bg};
+        color: {light.primary};
+    }}
+
+    Screen.light-mode Footer {{
+        background: {light.bg};
+    }}
+
+    Screen.light-mode Footer > .footer--key {{
+        background: {light.bg};
+        color: {light.primary};
+    }}
+
+    Screen.light-mode Footer > .footer--description {{
+        color: {light.text_muted};
+    }}
+
     Screen.light-mode #header_container {{
         background: {light.surface};
-        border-bottom: heavy {light.border};
+        border-bottom: none;
     }}
 
     Screen.light-mode #path_label {{
@@ -129,22 +181,30 @@ def build_app_tcss(
     }}
 
     Screen.light-mode #command_input, Screen.light-mode #filter_input {{
-        background: #FFFFFF;
-        border: tall {light.border};
+        background: {light.bg};
+        border: round {light.border};
         color: {light.text};
     }}
 
     Screen.light-mode #command_input:focus, Screen.light-mode #filter_input:focus {{
-        border: tall {light.border_focus};
+        border: round {light.border_focus};
     }}
 
     Screen.light-mode #suggestions_container {{
+        background: {light.surface_active};
+        border: round {light.border_focus};
+    }}
+
+    Screen.light-mode #suggestions_list {{
+        color: {light.text};
+    }}
+
+    Screen.light-mode #table_container {{
         background: {light.surface};
-        border: solid {light.border};
     }}
 
     Screen.light-mode #catalog_table, Screen.light-mode #providers_table {{
-        background: #FFFFFF;
+        background: {light.surface};
         border: round {light.border};
     }}
 
@@ -154,7 +214,7 @@ def build_app_tcss(
 
     Screen.light-mode DataTable > .datatable--cursor {{
         background: {light.highlight};
-        color: {light.text};
+        color: {light.secondary};
         text-style: bold;
     }}
 
@@ -166,7 +226,7 @@ def build_app_tcss(
 
     Screen.light-mode #status_panel {{
         background: {light.surface};
-        border-top: heavy {light.border};
+        border-top: solid {light.border};
     }}
 
     Screen.light-mode #status_text {{
@@ -174,6 +234,6 @@ def build_app_tcss(
     }}
 
     Screen.light-mode #loader {{
-        color: {light.secondary};
+        color: {light.primary};
     }}
     """.strip()

@@ -2,38 +2,35 @@ from __future__ import annotations
 
 from rich.text import Text
 
-from mapi_cli.ui.models import CELADON_DARK, CELADON_LIGHT
+from mapi_cli.ui.styles.palette import CELADON_DARK, CELADON_LIGHT
 
-MAPI_ASCII_ART = """
- ███╗   ███╗  █████╗  ██████╗  ██╗
- ████╗ ████║ ██╔══██╗ ██╔══██╗ ██║
- ██╔████╔██║ ███████║ ██████╔╝ ██║
- ██║╚██╔╝██║ ██╔══██║ ██╔═══╝  ██║
- ██║ ╚═╝ ██║ ██║  ██║ ██║      ██║
- ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝      ╚═╝
+# Slim, compact modern ASCII text art (mimics Claude-CLI / Gemini-CLI ergonomics)
+MAPI_ASCII_ART_SLIM = r"""
+  __  __   _   ___ ___
+ |  \/  | /_\ | _ \_ _|
+ | |\/| |/ _ \|  _/| |
+ |_|  |_/_/ \_\_| |___|
 """.strip("\n")
+
+# Legacy block art preserved for backwards compatibility
+MAPI_ASCII_ART = MAPI_ASCII_ART_SLIM
 
 
 def render_banner(is_dark: bool = True) -> Text:
-    """Render the MAPI ASCII text art with Celadon Green gradient styling."""
+    """Render slim, elegant MAPI ASCII text art with Celadon Green styling."""
     palette = CELADON_DARK if is_dark else CELADON_LIGHT
     art_text = Text()
 
-    # Apply stylish celadon gradient across the banner lines
-    lines = MAPI_ASCII_ART.split("\n")
-    accent_colors = (
-        [palette.accent, palette.secondary, palette.primary, palette.secondary, palette.accent, palette.text]
-        if is_dark
-        else [palette.primary, palette.secondary, palette.accent, palette.primary, palette.secondary, palette.text]
-    )
+    lines = MAPI_ASCII_ART_SLIM.split("\n")
+    for line in lines:
+        art_text.append(line + "\n", style=f"bold {palette.text}")
 
-    for i, line in enumerate(lines):
-        color = accent_colors[i % len(accent_colors)]
-        art_text.append(line + "\n", style=f"bold {color}")
-
-    art_text.append("  Universal API Discovery Engine & Toolchain\n", style=f"italic {palette.text_muted}")
+    art_text.append("  ⬡ Universal API Discovery Engine", style=f"bold {palette.primary}")
+    art_text.append(" • Type ", style=f"{palette.text_muted}")
+    art_text.append("/", style=f"bold {palette.secondary}")
+    art_text.append(" for commands\n", style=f"{palette.text_muted}")
     art_text.append(
-        "  Tip: You can pass --no-tui (or set MAPI_NO_TUI=1) to run in plain CLI mode.\n",
+        "  Tip: Pass --no-tui to use direct CLI mode.\n",
         style=f"dim {palette.text_muted}",
     )
     return art_text

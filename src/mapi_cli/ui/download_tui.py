@@ -21,7 +21,7 @@ from textual.widgets import (
 from mapi_cli.commands.download import _download_and_compile, _is_api_local
 from mapi_cli.paths import resolve_data_dir
 from mapi_cli.ui.banner import render_banner
-from mapi_cli.ui.styles import build_app_tcss
+from mapi_cli.ui.styles import CELADON_DARK, CELADON_LIGHT, build_app_tcss
 
 
 class DownloadTUIApp(App[None]):
@@ -145,15 +145,16 @@ class DownloadTUIApp(App[None]):
                 continue
 
             row_key = f"{p}/{a}"
-            status_style = "bold green" if is_dl else "dim yellow"
+            pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+            status_style = "bold green" if is_dl else f"dim {pal.text_muted}"
             status_str = "Downloaded" if is_dl else "Not Downloaded"
 
             table.add_row(
-                Text(p, style="bold cyan"),
-                Text(a, style="white"),
+                Text(p, style=f"bold {pal.secondary}"),
+                Text(a, style=pal.text),
                 Text(status_str, style=status_style),
-                Text(ops, style="green"),
-                Text(url or "(no remote spec)", style="dim"),
+                Text(ops, style=pal.primary),
+                Text(url or "(no remote spec)", style=f"dim {pal.text_muted}"),
                 key=row_key,
             )
 
@@ -182,6 +183,7 @@ class DownloadTUIApp(App[None]):
 
         banner = self.query_one("#banner_static", Static)
         banner.update(render_banner(self.is_dark))
+        self._populate_table()
         mode_name = "Celadon Dark" if self.is_dark else "Celadon Light"
         self.notify(f"Theme switched to {mode_name}")
 
