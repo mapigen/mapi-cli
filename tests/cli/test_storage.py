@@ -83,3 +83,41 @@ def test_storage_tier_hierarchy():
         assert t3.is_cached is True
         assert t3.is_compressed is True
         assert t3.is_downloaded is True
+
+
+def test_migrate_data_dir_preserves_local_popularity_rank():
+    """Verify that data migration strictly preserves existing local popularity rank."""
+    from mapi_cli.paths import migrate_data_dir
+
+    with tempfile.TemporaryDirectory() as tmp_src, tempfile.TemporaryDirectory() as tmp_dst:
+        src = Path(tmp_src)
+        dst = Path(tmp_dst)
+
+        # Source service with default popularity rank 1
+        src_svc = src / "github" / "REST" / "github"
+        src_svc.mkdir(parents=True, exist_ok=True)
+        (src_svc / "github.mapi.json.zst").write_bytes(b"\x28\xb5\x2f\xfd")
+        (src_svc / "metadata.yml").write_text("popularity_rank: 1\n", encoding="utf-8")
+
+        # Destination service already exists with user custom popularity rank 99
+        dst_svc = dst / "github" / "REST" / "github"
+        dst_svc.mkdir(parents=True, exist_ok=True)
+        (dst_svc / "github.mapi.json.zst").write_bytes(b"existing_custom_data")
+        (dst_svc / "metadata.yml").write_text("popularity_rank: 99\n", encoding="utf-8")
+
+        # Also add a new service in source that destination doesn't have yet
+        src_new = src / "stripe" / "stripe" / "stripe"
+        src_new.mkdir(parents=True, exist_ok=True)
+        (src_new / "stripe.mapi.json.zst").write_bytes(b"stripe_bytes")
+        (src_new / "metadata.yml").write_text("popularity_rank: 2\n", encoding="utf-8")
+
+        stats = migrate_data_dir(src, dst)
+        assert stats["preserved"] >= 1
+        assert stats["migrated"] >= 2  # stripe spec + metadata
+
+        # Destination existing file and rank must NOT be overwritten
+        assert (dst_svc / "metadata.yml").read_text(encoding="utf-8") == "popularity_rank: 99\n"
+        assert (dst_svc / "github.mapi.json.zst").read_bytes() == b"existing_custom_data"
+
+        # Destination new service must be present
+        assert (dst / "stripe" / "stripe" / "stripe" / "metadata.yml").exists()

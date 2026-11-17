@@ -74,7 +74,15 @@ class RegistryBuilder:
                             if "primary_auth" in auth_override:
                                 primary_auth = auth_override["primary_auth"]
 
-                        pop_rank = popularity.get(provider_name, metadata.popularity_rank)
+                        # Rule of thumb: if local storage already has a popularity rank,
+                        # do NOT override it. Defaults only apply to unranked/new items.
+                        local_rank = getattr(metadata, "popularity_rank", None)
+                        if local_rank is not None and local_rank < 999:
+                            pop_rank = local_rank
+                        elif provider_name in popularity:
+                            pop_rank = popularity[provider_name]
+                        else:
+                            pop_rank = getattr(metadata, "popularity_rank", 999)
 
                         if provider_name not in providers:
                             providers[provider_name] = {}

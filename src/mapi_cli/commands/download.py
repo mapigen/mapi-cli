@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -94,6 +95,31 @@ def _download_and_compile(
                 out_dir = data_dir / provider / source / api
                 out_dir.mkdir(parents=True, exist_ok=True)
                 metadata_path = out_dir / "metadata.yml"
+
+                # Rule of thumb: if popularity rank already exists in local storage of the project,
+                # do NOT override it. Defaults only apply to new/unranked items.
+                existing_pop = None
+                if metadata_path.exists():
+                    try:
+                        existing_meta = yaml.safe_load(metadata_path.read_text(encoding="utf-8")) or {}
+                        if "popularity_rank" in existing_meta and existing_meta["popularity_rank"] is not None:
+                            existing_pop = existing_meta["popularity_rank"]
+                    except Exception:
+                        pass
+
+                local_pop_file = data_dir / "popularity.json"
+                if existing_pop is None and local_pop_file.exists():
+                    try:
+                        pop_data = json.loads(local_pop_file.read_text(encoding="utf-8"))
+                        if provider in pop_data:
+                            existing_pop = pop_data[provider]
+                    except Exception:
+                        pass
+
+                final_pop_rank = (
+                    existing_pop if existing_pop is not None else getattr(info, "popularity_rank", 999)
+                )
+
                 meta_dict = {
                     "format_version": 3,
                     "api_reference": spec_url,
@@ -102,7 +128,7 @@ def _download_and_compile(
                     "reusable_parameter_count": metrics.reusable_param_count,
                     "auth_types": getattr(info, "auth_types", []),
                     "primary_auth": getattr(info, "primary_auth", "none"),
-                    "popularity_rank": getattr(info, "popularity_rank", 999),
+                    "popularity_rank": final_pop_rank,
                 }
                 metadata_path.write_text(yaml.dump(meta_dict), encoding="utf-8")
 
