@@ -53,6 +53,14 @@ async def test_download_tui_navigation_and_filter():
         await pilot.pause()
         assert table.row_count >= 5
 
+        # Test Ctrl+Right / Ctrl+Left page navigation bindings
+        await pilot.press("ctrl+right")
+        await pilot.pause()
+        assert app.page_number == 1
+        await pilot.press("ctrl+left")
+        await pilot.pause()
+        assert app.page_number == 1
+
         # Test loader display toggles without 'str object has no attribute value' error
         app.set_loading(True)
         assert app.query_one("#loader").styles.display == "block"

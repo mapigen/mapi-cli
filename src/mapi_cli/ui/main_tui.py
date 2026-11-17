@@ -48,11 +48,13 @@ class MapiTUIApp(App[None]):
     """
 
     TITLE = "MAPI"
-    SUB_TITLE = "Type '/' for commands • Enter: inspect • c: call • i: requirements • t: theme"
+    SUB_TITLE = "Type '/' for commands • Enter: inspect • c: call • Ctrl+← / Ctrl+→: pages • t: theme"
     CSS = build_app_tcss()
 
     BINDINGS = [
         Binding("enter", "select_row", "Select / Inspect"),
+        Binding("ctrl+left", "page_back", "Back / Prev Page", key_display="Ctrl+←"),
+        Binding("ctrl+right", "page_forward", "Forward / Next Page", key_display="Ctrl+→"),
         Binding("c", "call_action", "Call Endpoint"),
         Binding("i", "inspect_action", "Inspect Reqs & Auth"),
         Binding("slash", "focus_command_palette", "Commands / Search", key_display="/"),
@@ -83,6 +85,10 @@ class MapiTUIApp(App[None]):
         self.selected_api: str | None = None
         self.selected_operation: str | None = None
         self._current_filter: str = ""
+        self.page_number: int = 1
+        self.page_size: int = 25
+        self.total_pages: int = 1
+        self._last_op_pages: dict[str, int] = {}
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -165,10 +171,25 @@ class MapiTUIApp(App[None]):
 
         q = query.strip().lower()
         if q.startswith("/"):
-            # When typing a slash command, do not filter table out
             q = ""
 
+        matching = []
         for item in self._all_items:
+            p = item["provider"]
+            a = item["api"]
+            url = item["spec_url"]
+            if q and (q not in p.lower() and q not in a.lower() and q not in url.lower()):
+                continue
+            matching.append(item)
+
+        self.total_pages = max(1, (len(matching) + self.page_size - 1) // self.page_size)
+        self.page_number = max(1, min(self.page_number, self.total_pages))
+        start_idx = (self.page_number - 1) * self.page_size
+        end_idx = min(start_idx + self.page_size, len(matching))
+        page_items = matching[start_idx:end_idx]
+
+        pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+        for item in page_items:
             p = item["provider"]
             a = item["api"]
             url = item["spec_url"]
@@ -176,10 +197,6 @@ class MapiTUIApp(App[None]):
             auth = item["auth"]
             is_dl = item["downloaded"]
 
-            if q and (q not in p.lower() and q not in a.lower() and q not in url.lower()):
-                continue
-
-            pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
             row_key = f"{p}/{a}"
             status_style = "bold green" if is_dl else f"dim {pal.text_muted}"
             status_str = "Downloaded" if is_dl else "Not Downloaded"
@@ -210,7 +227,7 @@ class MapiTUIApp(App[None]):
         if q.startswith("/"):
             q = ""
 
-        pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+        matching = []
         for item in self._current_operations:
             op_id = item["id"]
             op_name = item["operation_id"]
@@ -226,6 +243,21 @@ class MapiTUIApp(App[None]):
                 and q not in summary.lower()
             ):
                 continue
+            matching.append(item)
+
+        self.total_pages = max(1, (len(matching) + self.page_size - 1) // self.page_size)
+        self.page_number = max(1, min(self.page_number, self.total_pages))
+        start_idx = (self.page_number - 1) * self.page_size
+        end_idx = min(start_idx + self.page_size, len(matching))
+        page_items = matching[start_idx:end_idx]
+
+        pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+        for item in page_items:
+            op_id = item["id"]
+            op_name = item["operation_id"]
+            m = item["method"]
+            path = item["path"]
+            summary = item["summary"]
 
             table.add_row(
                 Text(m, style=method_style(m)),
@@ -234,6 +266,18 @@ class MapiTUIApp(App[None]):
                 Text(summary, style=f"italic {pal.text_muted}"),
                 key=op_id,
             )
+
+        status_text = self.query_one("#status_text", Static)
+        p_name = self.selected_provider or ""
+        a_name = self.selected_api or ""
+        total_ops = len(matching)
+        range_str = f"{start_idx + 1}-{end_idx} of {total_ops}" if total_ops > 0 else "0 operations"
+        status_text.update(
+            f"[bold {pal.secondary}]{escape(p_name)}/{escape(a_name)}:[/] "
+            f"Page [bold {pal.primary}]{self.page_number}[/] of [bold]{self.total_pages}[/] "
+            f"({range_str}). "
+            f"[dim]Ctrl+← / Ctrl+→: pages • ↑/↓: cursor • c: call • i: reqs[/]"
+        )
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "command_input":
@@ -271,6 +315,21 @@ class MapiTUIApp(App[None]):
         suggestions_container = self.query_one("#suggestions_container", Vertical)
         opt_list = self.query_one("#suggestions_list", OptionList)
 
+        # 1. Page navigation via Ctrl+Left / Alt+Left (Back)
+        if event.key in ("ctrl+left", "alt+left"):
+            self.action_page_back()
+            event.prevent_default()
+            event.stop()
+            return
+
+        # 2. Page navigation via Ctrl+Right / Alt+Right (Forward)
+        if event.key in ("ctrl+right", "alt+right"):
+            self.action_page_forward()
+            event.prevent_default()
+            event.stop()
+            return
+
+        # 3. Input widget handling: Up/Down for suggestions or focus shift; Left/Right stay horizontal cursor movement
         if input_widget.has_focus:
             if suggestions_container.styles.display == "block" and opt_list.option_count > 0:
                 if event.key == "down":
@@ -301,7 +360,7 @@ class MapiTUIApp(App[None]):
 
         table = self.query_one("#catalog_table", DataTable)
         if table.has_focus and event.key in ("backspace", "b") and self.current_view == "operations":
-            self.action_back_to_catalog()
+            self.action_page_back()
             event.prevent_default()
             event.stop()
             return
@@ -382,10 +441,14 @@ class MapiTUIApp(App[None]):
                     self.notify("Open an API to inspect operations", severity="warning")
             else:
                 self.action_inspect_action()
+        elif root_cmd in ("/next", "/forward", "/n"):
+            self.action_page_forward()
+        elif root_cmd in ("/prev", "/back", "/p"):
+            self.action_page_back()
         elif root_cmd in ("/help", "/?"):
             self.notify(
-                "Commands: /call, /dry-run, /curl, /inspect, /apis, /ops, /download, /search, /theme, /quit\n"
-                "Shortcuts: c (call), i (inspect), Enter (select/reqs), d (download), / (palette), t (theme), b/Esc (back)",
+                "Commands: /call, /dry-run, /curl, /inspect, /next, /prev, /apis, /ops, /download, /search, /theme, /quit\n"
+                "Shortcuts: Ctrl+← / Ctrl+→ (pages), c (call), i (inspect), Enter (select), ↑/↓ (cursor), d (download), t (theme)",
                 title="MAPI Help",
                 timeout=8,
             )
@@ -401,18 +464,33 @@ class MapiTUIApp(App[None]):
         input_widget.cursor_position = 1
 
     def action_back_to_catalog(self) -> None:
+        last_provider = self.selected_provider
+        last_api = self.selected_api
         self.current_view = "providers"
         self.selected_provider = None
         self.selected_api = None
         self.selected_operation = None
         self._current_filter = ""
+        self.page_number = 1
         input_widget = self.query_one("#command_input", Input)
         input_widget.value = ""
         self._setup_catalog_columns()
         self._populate_catalog()
+
+        # Restore cursor to previous provider
+        if last_provider and last_api:
+            table = self.query_one("#catalog_table", DataTable)
+            target_key = f"{last_provider}/{last_api}"
+            try:
+                row_idx = table.get_row_index(target_key)
+                table.move_cursor(row=row_idx)
+            except Exception:
+                pass
+
         status_text = self.query_one("#status_text", Static)
         status_text.update(
-            "[dim]Ready. Press [bold]Enter[/] to inspect operations, [bold]d[/] to download, or [bold]/[/] for commands.[/]"
+            "[dim]Ready. Select an API and press [bold]Enter[/] or [bold]Ctrl+→[/] to explore endpoints, "
+            "[bold]Ctrl+←[/] to go back, [bold]c[/] to call, or [bold]/[/] for commands.[/]"
         )
         self.query_one("#catalog_table", DataTable).focus()
         self.notify("Returned to Providers & APIs catalog")
@@ -510,6 +588,65 @@ class MapiTUIApp(App[None]):
                 self.selected_operation = key_str
                 return key_str
         return self.selected_operation
+
+    def _get_selected_provider_key(self) -> str | None:
+        table = self.query_one("#catalog_table", DataTable)
+        if table.row_count > 0:
+            coordinate = table.cursor_coordinate
+            row_key_obj = table.coordinate_to_cell_key(coordinate).row_key
+            if row_key_obj:
+                return str(getattr(row_key_obj, "value", row_key_obj))
+        if self._all_items:
+            first = self._all_items[0]
+            return f"{first['provider']}/{first['api']}"
+        return None
+
+    def action_page_forward(self) -> None:
+        if self.current_view == "providers":
+            if self.page_number < self.total_pages:
+                self.page_number += 1
+                self._populate_catalog(query=self._current_filter)
+                self.notify(f"Providers Catalog: Page {self.page_number}/{self.total_pages}")
+            else:
+                key_str = self._get_selected_provider_key()
+                if key_str and "/" in key_str:
+                    provider, api = key_str.split("/", 1)
+                    self._show_operations_for(provider, api)
+                else:
+                    self.notify("Select an API to explore operations", severity="information")
+        elif self.current_view == "operations":
+            if self.page_number < self.total_pages:
+                self.page_number += 1
+                if self.selected_provider and self.selected_api:
+                    self._last_op_pages[f"{self.selected_provider}/{self.selected_api}"] = self.page_number
+                self._populate_operations(query=self._current_filter)
+                table = self.query_one("#catalog_table", DataTable)
+                if table.row_count > 0:
+                    table.move_cursor(row=0)
+                self.notify(f"Operations: Page {self.page_number}/{self.total_pages}")
+            else:
+                self.notify(f"Already on the last page ({self.total_pages}/{self.total_pages})", severity="information")
+
+    def action_page_back(self) -> None:
+        if self.current_view == "operations":
+            if self.page_number > 1:
+                self.page_number -= 1
+                if self.selected_provider and self.selected_api:
+                    self._last_op_pages[f"{self.selected_provider}/{self.selected_api}"] = self.page_number
+                self._populate_operations(query=self._current_filter)
+                table = self.query_one("#catalog_table", DataTable)
+                if table.row_count > 0:
+                    table.move_cursor(row=0)
+                self.notify(f"Operations: Page {self.page_number}/{self.total_pages}")
+            else:
+                self.action_back_to_catalog()
+        elif self.current_view == "providers":
+            if self.page_number > 1:
+                self.page_number -= 1
+                self._populate_catalog(query=self._current_filter)
+                self.notify(f"Providers Catalog: Page {self.page_number}/{self.total_pages}")
+            else:
+                self.notify("Already at top level (Providers & APIs catalog)", severity="information")
 
     def action_inspect_action(self) -> None:
         if self.current_view != "operations" or not self.selected_provider or not self.selected_api:
@@ -838,6 +975,9 @@ class MapiTUIApp(App[None]):
             self.selected_provider = provider
             self.selected_api = api
 
+            op_key = f"{provider}/{api}"
+            self.page_number = self._last_op_pages.get(op_key, 1)
+
             self._current_operations.clear()
             for op_id, op in sd.operations.items():
                 self._current_operations.append({
@@ -852,12 +992,6 @@ class MapiTUIApp(App[None]):
 
             self._setup_operations_columns()
             self._populate_operations()
-
-            pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
-            status_text.update(
-                f"[bold {pal.secondary}]{escape(provider)}/{escape(api or '')}:[/] Displaying {len(self._current_operations)} operations. "
-                f"Press [bold {pal.primary}]Enter[/] to inspect, [bold {pal.primary}]Esc[/] or [bold {pal.primary}]b[/] to go back, or type to filter."
-            )
             self.notify(f"Loaded {len(self._current_operations)} operations for {provider}/{api}")
             self.query_one("#catalog_table", DataTable).focus()
         except Exception:

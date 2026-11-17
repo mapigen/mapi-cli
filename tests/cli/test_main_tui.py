@@ -211,3 +211,91 @@ async def test_main_tui_call_and_requirements():
         assert "Cannot Call:" in str(status_text.render())
         assert "Missing argument(s)" in str(status_text.render())
 
+
+@pytest.mark.asyncio
+async def test_main_tui_page_navigation_and_cursor_isolation():
+    """Verify up/down cursor isolation, left/right horizontal neutrality, and ctrl+left/ctrl+right page navigation."""
+    data_dir, _ = resolve_data_dir()
+    client = Mapi(data_dir=data_dir)
+    app = MapiTUIApp(client=client, data_dir=data_dir)
+
+    async with app.run_test() as pilot:
+        table = pilot.app.query_one("#catalog_table", DataTable)
+        assert app.current_view == "providers"
+
+        # 1. Verify Up / Down stays cursor navigation (does not change view/page)
+        initial_row = table.cursor_coordinate.row
+        await pilot.press("down")
+        await pilot.pause()
+        assert table.cursor_coordinate.row == initial_row + 1
+        assert app.current_view == "providers"
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert table.cursor_coordinate.row == initial_row
+        assert app.current_view == "providers"
+
+        # 2. Verify plain Left / Right does NOT navigate pages
+        await pilot.press("right")
+        await pilot.pause()
+        assert app.current_view == "providers"
+
+        await pilot.press("left")
+        await pilot.pause()
+        assert app.current_view == "providers"
+
+        # 3. Ctrl+Right in providers view navigates forward into operations for selected API (pokeapi)
+        await pilot.press("ctrl+right")
+        await pilot.pause()
+        assert app.current_view == "operations"
+        assert app.selected_provider == "pokeapi"
+        assert app.page_number == 1
+        assert app.total_pages == 5  # pokeapi has 102 ops, 25 per page = 5 pages
+        assert table.row_count == 25
+
+        # 4. In operations view, Up / Down stays cursor navigation
+        op_initial_row = table.cursor_coordinate.row
+        await pilot.press("down")
+        await pilot.pause()
+        assert table.cursor_coordinate.row == op_initial_row + 1
+        assert app.page_number == 1
+
+        # 5. Ctrl+Right in operations navigates forward to Page 2
+        await pilot.press("ctrl+right")
+        await pilot.pause()
+        assert app.page_number == 2
+        assert table.row_count == 25  # page 2 has 25 items (items 26-50)
+
+        # 6. Ctrl+Left in operations navigates back to Page 1
+        await pilot.press("ctrl+left")
+        await pilot.pause()
+        assert app.page_number == 1
+        assert table.row_count == 25
+
+        # 7. Ctrl+Left on Page 1 navigates back to Providers & APIs catalog
+        await pilot.press("ctrl+left")
+        await pilot.pause()
+        assert app.current_view == "providers"
+        assert table.row_count >= 5
+
+        # 8. Test /next and /prev slash commands
+        input_widget = pilot.app.query_one("#command_input", Input)
+        input_widget.focus()
+        input_widget.value = "/next"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.current_view == "operations"
+
+        input_widget.focus()
+        input_widget.value = "/next"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.page_number == 2
+
+        input_widget.focus()
+        input_widget.value = "/prev"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.page_number == 1
+
+

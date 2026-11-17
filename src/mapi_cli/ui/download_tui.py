@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from rich.text import Text
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -28,11 +28,13 @@ class DownloadTUIApp(App[None]):
     """Interactive Textual TUI for browsing and downloading MAPI API specifications."""
 
     TITLE = "MAPI Specification Manager"
-    SUB_TITLE = "Arrow Keys (↑/↓) to navigate • Enter to download • t: theme • /: search"
+    SUB_TITLE = "Arrow Keys (↑/↓) navigate • Ctrl+← / Ctrl+→ pages • Enter download • t: theme • /: search"
     CSS = build_app_tcss()
 
     BINDINGS = [
         Binding("enter", "download_selected", "Download Selected", priority=True),
+        Binding("ctrl+left", "page_back", "Prev Page", key_display="Ctrl+←"),
+        Binding("ctrl+right", "page_forward", "Next Page", key_display="Ctrl+→"),
         Binding("a", "download_all", "Download All"),
         Binding("f", "toggle_force", "Toggle Force"),
         Binding("t", "toggle_theme", "Toggle Celadon Theme"),
@@ -54,6 +56,9 @@ class DownloadTUIApp(App[None]):
         self.is_dark: bool = True
         self._all_items: list[dict[str, Any]] = []
         self._is_busy = False
+        self.page_number: int = 1
+        self.page_size: int = 25
+        self.total_pages: int = 1
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -134,16 +139,27 @@ class DownloadTUIApp(App[None]):
         if q.startswith("/"):
             q = q[1:]
 
+        matching = []
         for item in self._all_items:
+            p = item["provider"]
+            a = item["api"]
+            url = item["spec_url"]
+            if q and (q not in p.lower() and q not in a.lower() and q not in url.lower()):
+                continue
+            matching.append(item)
+
+        self.total_pages = max(1, (len(matching) + self.page_size - 1) // self.page_size)
+        self.page_number = max(1, min(self.page_number, self.total_pages))
+        start_idx = (self.page_number - 1) * self.page_size
+        end_idx = min(start_idx + self.page_size, len(matching))
+        page_items = matching[start_idx:end_idx]
+
+        for item in page_items:
             p = item["provider"]
             a = item["api"]
             url = item["spec_url"]
             ops = str(item["operations"])
             is_dl = item["downloaded"]
-
-            # Filter check
-            if q and (q not in p.lower() and q not in a.lower() and q not in url.lower()):
-                continue
 
             row_key = f"{p}/{a}"
             pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
@@ -158,6 +174,36 @@ class DownloadTUIApp(App[None]):
                 Text(url or "(no remote spec)", style=f"dim {pal.text_muted}"),
                 key=row_key,
             )
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key in ("ctrl+left", "alt+left"):
+            self.action_page_back()
+            event.prevent_default()
+            event.stop()
+            return
+        elif event.key in ("ctrl+right", "alt+right"):
+            self.action_page_forward()
+            event.prevent_default()
+            event.stop()
+            return
+
+    def action_page_forward(self) -> None:
+        if self.page_number < self.total_pages:
+            self.page_number += 1
+            input_widget = self.query_one("#filter_input", Input)
+            self._populate_table(query=input_widget.value)
+            self.notify(f"Page {self.page_number}/{self.total_pages}")
+        else:
+            self.notify(f"Already on last page ({self.total_pages}/{self.total_pages})", severity="information")
+
+    def action_page_back(self) -> None:
+        if self.page_number > 1:
+            self.page_number -= 1
+            input_widget = self.query_one("#filter_input", Input)
+            self._populate_table(query=input_widget.value)
+            self.notify(f"Page {self.page_number}/{self.total_pages}")
+        else:
+            self.notify("Already on first page", severity="information")
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "filter_input":
