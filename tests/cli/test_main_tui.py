@@ -470,5 +470,47 @@ async def test_main_tui_discord_create_message_and_bracket_commands():
         assert app.current_view == "operations"
 
 
+@pytest.mark.asyncio
+async def test_main_tui_search_from_operation_detail_and_column_resilience():
+    """Verify typing a search query from operation_detail transitions cleanly without ValueError column mismatch."""
+    data_dir, _ = resolve_data_dir()
+    client = Mapi(data_dir=data_dir)
+    app = MapiTUIApp(client=client, data_dir=data_dir)
+
+    async with app.run_test() as pilot:
+        # Navigate to operations
+        app._show_operations_for("discord", "REST")
+        await pilot.pause()
+        assert app.current_view == "operations"
+
+        # Open an operation
+        app._open_operation_page("create_message")
+        await pilot.pause()
+        assert app.current_view == "operation_detail"
+
+        # User types 'poke' into command_input while in operation_detail
+        cmd_inp = app.query_one("#command_input", Input)
+        cmd_inp.value = "poke"
+        await pilot.pause()
+
+        # Should transition back to providers, table visible, 6 catalog columns, filtered to pokeapi
+        assert app.current_view == "providers"
+        table = app.query_one("#catalog_table", DataTable)
+        assert table.styles.display == "block"
+        assert len(table.ordered_columns) == 6
+        assert table.row_count == 1
+        first_row = table.get_row_at(0)
+        assert "pokeapi" in str(first_row[0])
+
+        # Test self-healing: call _populate_operations directly while table has catalog columns
+        app._populate_operations()
+        assert len(table.ordered_columns) == 4
+
+        # Test self-healing: call _populate_catalog directly while table has operations columns
+        app._populate_catalog()
+        assert len(table.ordered_columns) == 6
+
+
+
 
 

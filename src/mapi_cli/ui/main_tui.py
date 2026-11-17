@@ -183,7 +183,11 @@ class MapiTUIApp(App[None]):
 
     def _populate_catalog(self, query: str = "") -> None:
         table = self.query_one("#catalog_table", DataTable)
-        table.clear()
+        current_cols = [k.value for k in table.columns]
+        if current_cols != ["provider", "api", "status", "ops", "auth", "url"]:
+            self._setup_catalog_columns()
+        else:
+            table.clear()
 
         q = query.strip().lower()
         if q.startswith("/"):
@@ -244,7 +248,11 @@ class MapiTUIApp(App[None]):
 
     def _populate_operations(self, query: str = "") -> None:
         table = self.query_one("#catalog_table", DataTable)
-        table.clear()
+        current_cols = [k.value for k in table.columns]
+        if current_cols != ["method", "op", "path", "summary"]:
+            self._setup_operations_columns()
+        else:
+            table.clear()
 
         q = query.strip().lower()
         if q.startswith("/"):
@@ -308,7 +316,16 @@ class MapiTUIApp(App[None]):
             self._update_suggestions(val)
             if not val.startswith("/") and val != self._current_filter:
                 self._current_filter = val
-                if self.current_view == "operations":
+                if self.current_view == "operation_detail":
+                    self._close_operation_page()
+                    self.selected_provider = None
+                    self.selected_api = None
+                    self.selected_operation = None
+                    self.current_view = "providers"
+                    self.page_number = 1
+                    self._setup_catalog_columns()
+                    self._populate_catalog(query=val)
+                elif self.current_view == "operations":
                     self._populate_operations(query=val)
                 else:
                     self._populate_catalog(query=val)
@@ -455,7 +472,17 @@ class MapiTUIApp(App[None]):
                 self.action_select_row()
         elif root_cmd in ("/search", "/find", "/query"):
             query_term = " ".join(tokens[1:]) if len(tokens) > 1 else ""
-            if self.current_view == "operations":
+            if self.current_view == "operation_detail":
+                self._close_operation_page()
+                self.selected_provider = None
+                self.selected_api = None
+                self.selected_operation = None
+                self.current_view = "providers"
+                self.page_number = 1
+                self._setup_catalog_columns()
+                self._populate_catalog(query=query_term)
+                self.notify(f"Filtering catalog by '{query_term}'" if query_term else "Cleared catalog filter")
+            elif self.current_view == "operations":
                 self._populate_operations(query=query_term)
                 self.notify(f"Filtering operations by '{query_term}'" if query_term else "Cleared operations filter")
             else:
@@ -1355,8 +1382,14 @@ class MapiTUIApp(App[None]):
                 f"({res.get('operations', 0)} operations compiled)",
             )
             self.notify(f"Successfully downloaded {provider}/{api}", severity="information")
-            self.call_from_thread(self._load_data)
-            self.call_from_thread(self._populate_catalog)
+            def _refresh_after_dl() -> None:
+                self._load_data()
+                if self.current_view == "providers":
+                    self._populate_catalog()
+                elif self.current_view == "operations":
+                    self._populate_operations()
+
+            self.call_from_thread(_refresh_after_dl)
         elif status == "skipped":
             self.call_from_thread(
                 status_text.update,
@@ -1421,6 +1454,12 @@ class MapiTUIApp(App[None]):
         )
         self.call_from_thread(self.set_loading, False)
         self.notify(f"Batch completed: {success_count}/{total} downloaded")
-        self.call_from_thread(self._load_data)
-        self.call_from_thread(self._populate_catalog)
+        def _refresh_after_batch() -> None:
+            self._load_data()
+            if self.current_view == "providers":
+                self._populate_catalog()
+            elif self.current_view == "operations":
+                self._populate_operations()
+
+        self.call_from_thread(_refresh_after_batch)
         self._is_busy = False
