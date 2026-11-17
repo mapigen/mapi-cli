@@ -112,3 +112,125 @@ def test_execute_operation_call_dry_run_and_curl():
     curl_res = execute_operation_call(client, chk, {"id": "1"}, emit_curl=True)
     assert isinstance(curl_res, RequestConfig)
     assert "curl" in curl_res.to_curl()
+
+
+def test_safe_markup_and_param_input_id():
+    """Verify safe_markup and make_param_input_id helpers."""
+    from textual.content import Content
+    from textual.dom import check_identifiers
+
+    from mapi_cli.ui.operation_view import make_param_input_id, safe_markup
+
+    # 1. safe_markup escapes brackets so Content.from_markup parses without MarkupError
+    for text in [
+        "[/]",
+        "files[0]",
+        "[`confirm=true`]",
+        "list[string]",
+        "C:\\Users\\[name]",
+        "Unknown command '[/]'.",
+        None,
+    ]:
+        escaped = safe_markup(text)
+        content = Content.from_markup(f"[dim]{escaped}[/]")
+        assert content is not None
+
+    # 2. make_param_input_id generates valid DOM IDs matching Textual constraints
+    cases = [
+        ("id", 0, "op_input_id"),
+        ("user_id", 1, "op_input_user_id"),
+        ("files[0]", 14, "op_input_14_files_0"),
+        ("files[9]", 23, "op_input_23_files_9"),
+        ("teams.any", 2, "op_input_2_teams_any"),
+        ("$select", 3, "op_input_3_select"),
+        ("123_invalid", 4, "op_input_4_123_invalid"),
+        ("---", 5, "op_input_5_---"),
+    ]
+    for param_name, idx, expected in cases:
+        actual = make_param_input_id(param_name, index=idx)
+        assert actual == expected
+        # Must pass Textual's DOM identifier check without BadIdentifier
+        check_identifiers("id", actual)
+
+
+async def test_operation_runner_page_with_bracket_parameters():
+    """Verify OperationRunnerPage mounts and collects inputs with bracket params."""
+    from textual.app import App, ComposeResult
+    from textual.widgets import Input
+
+    from mapi_cli.operations import (
+        OperationAuthDetail,
+        OperationParamDetail,
+        OperationRequirementCheck,
+    )
+    from mapi_cli.ui.operation_view import OperationRunnerPage
+
+    param_id = OperationParamDetail(
+        name="id",
+        in_="path",
+        type_str="integer",
+        is_required=True,
+        description="Standard identifier",
+    )
+    param_bracket = OperationParamDetail(
+        name="files[0]",
+        in_="body",
+        type_str="list[string]",
+        is_required=False,
+        description="File payload [`confirm=true`](https://stripe.com) or [markdown link]",
+    )
+    auth = OperationAuthDetail(
+        is_required=True,
+        is_configured=False,
+        primary_auth="bearer",
+        env_var_name="API_KEY",
+        message="Token [test_token] required",
+    )
+    chk = OperationRequirementCheck(
+        provider="test_prov",
+        api="test_api",
+        operation_id="test_op",
+        method="POST",
+        path="/v1/test/[id]",
+        summary="Summary with [brackets]",
+        description="Full desc with [markdown](link) and [0] and [/] tags",
+        source="registry",
+        storage_tier="Compressed",
+        parameters=[param_id, param_bracket],
+        required_parameters=[param_id],
+        optional_parameters=[param_bracket],
+        missing_parameters=[],
+        auth=auth,
+        can_execute=True,
+        status_summary="Ready [ok]",
+        example_call="/call test",
+    )
+
+    class TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield OperationRunnerPage(chk)
+
+    app = TestApp()
+    async with app.run_test() as pilot:
+        page = app.query_one(OperationRunnerPage)
+        assert page is not None
+
+        # Verify widget IDs
+        id_inp = page.query_one("#op_input_id", Input)
+        bracket_inp = page.query_one("#op_input_1_files_0", Input)
+        assert id_inp.name == "id"
+        assert bracket_inp.name == "files[0]"
+
+        # Set values and verify collected inputs
+        id_inp.value = "42"
+        bracket_inp.value = "test_file.png"
+        await pilot.pause()
+
+        collected = page.get_collected_inputs()
+        assert collected["id"] == 42
+        assert collected["files[0]"] == "test_file.png"
+
+        # Verify display_result and display_error with tricky strings
+        page.display_result({"data": "test [brackets]"}, "call/[0]")
+        page.display_error("Error: [/] failed", "call/[0]")
+

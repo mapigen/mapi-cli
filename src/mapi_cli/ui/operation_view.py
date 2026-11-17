@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from mapi.models.request import RequestConfig
 from mapi.models.response import MapiResult
 from rich.json import JSON
-from rich.markup import escape
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
@@ -18,6 +18,32 @@ from mapi_cli.operations import (
     _parse_typed_value,
 )
 from mapi_cli.ui.styles.palette import CELADON_DARK, CELADON_LIGHT, CeladonPalette
+
+
+def safe_markup(text: object) -> str:
+    """Safely escape literal text for insertion into Rich / Textual markup strings.
+
+    Guarantees no square brackets can corrupt the markup tag stack.
+    """
+    if text is None:
+        return ""
+    s = str(text)
+    s = s.replace("\\", "\\\\")
+    return s.replace("[", "\\[")
+
+
+def make_param_input_id(param_name: str, index: int = 0) -> str:
+    """Create a valid Textual DOM identifier matching ^[a-zA-Z_][a-zA-Z0-9_-]*$.
+
+    If param_name is already a valid identifier (e.g. 'id', 'user_id'), returns
+    'op_input_{param_name}' to maintain selector compatibility.
+    Otherwise replaces invalid characters (such as '[', ']', '.', '$') with underscores
+    and prefixes with index to ensure uniqueness and validity.
+    """
+    if re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_-]*", param_name):
+        return f"op_input_{param_name}"
+    clean = re.sub(r"[^a-zA-Z0-9_-]", "_", param_name).strip("_")
+    return f"op_input_{index}_{clean}" if clean else f"op_input_{index}"
 
 
 def get_http_method_color(method: str) -> str:
@@ -84,6 +110,9 @@ class OperationRunnerPage(VerticalScroll):
         self.chk = chk
         self.is_dark = is_dark
         self.initial_kwargs = initial_kwargs or {}
+        self._param_index_map: dict[int, int] = {
+            id(p): idx for idx, p in enumerate(self.chk.parameters)
+        }
 
     def compose(self) -> ComposeResult:
         pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
@@ -127,14 +156,14 @@ class OperationRunnerPage(VerticalScroll):
             # Authentication Token Input (if required)
             if self.chk.auth.is_required:
                 yield Static(
-                    f"[bold {pal.secondary}]Authentication ({self.chk.auth.primary_auth}):[/]",
+                    f"[bold {pal.secondary}]Authentication ({safe_markup(self.chk.auth.primary_auth)}):[/]",
                     classes="op-group-title",
                 )
                 status_badge = "[CONFIGURED]" if self.chk.auth.is_configured else "[REQUIRED]"
                 status_color = "green" if self.chk.auth.is_configured else "yellow"
                 yield Static(
-                    f"[{status_color}]{status_badge} {escape(self.chk.auth.message)}[/] • "
-                    f"Env var: [cyan]{self.chk.auth.env_var_name}[/]",
+                    f"[{status_color}]{safe_markup(status_badge)} {safe_markup(self.chk.auth.message)}[/] • "
+                    f"Env var: [cyan]{safe_markup(self.chk.auth.env_var_name)}[/]",
                     classes="op-param-desc",
                 )
                 init_tok = str(self.initial_kwargs.get("token", ""))
@@ -200,14 +229,14 @@ class OperationRunnerPage(VerticalScroll):
         """Compose label and input for a single parameter."""
         req_marker = "[bold red]*[/]" if is_required else "[dim](opt)[/]"
         in_color = "cyan" if p.in_ == "path" else "yellow"
-        in_escaped = escape(f"[{p.in_}]")
+        in_escaped = safe_markup(f"[{p.in_}]")
         label_text = (
-            f"[bold {pal.text}]{escape(p.name)}[/] {req_marker} "
+            f"[bold {pal.text}]{safe_markup(p.name)}[/] {req_marker} "
             f"[{in_color}]{in_escaped}[/] "
-            f"[dim]({escape(p.type_str)})[/]"
+            f"[dim]({safe_markup(p.type_str)})[/]"
         )
         if p.description:
-            label_text += f" • [italic dim]{escape(p.description)}[/]"
+            label_text += f" • [italic dim]{safe_markup(p.description)}[/]"
 
         yield Label(label_text, classes="op-param-label")
 
@@ -217,10 +246,13 @@ class OperationRunnerPage(VerticalScroll):
         elif p.default is not None:
             init_val = str(p.default)
 
+        canonical_idx = self._param_index_map.get(id(p), 0)
+        input_id = make_param_input_id(p.name, index=canonical_idx)
         yield Input(
             placeholder=f"Enter {p.name} ({p.type_str})...",
             value=init_val,
-            id=f"op_input_{p.name}",
+            id=input_id,
+            name=p.name,
             classes="op-param-input",
         )
 
@@ -229,18 +261,18 @@ class OperationRunnerPage(VerticalScroll):
         m = chk.method.upper()
         m_color = get_http_method_color(m)
 
-        summary_line = f"[italic {pal.text}]{escape(chk.summary)}[/]" if chk.summary else ""
+        summary_line = f"[italic {pal.text}]{safe_markup(chk.summary)}[/]" if chk.summary else ""
         desc_line = (
-            f"[dim {pal.text_muted}]{escape(chk.description)}[/]"
+            f"[dim {pal.text_muted}]{safe_markup(chk.description)}[/]"
             if chk.description and chk.description != chk.summary
             else ""
         )
 
         auth_line = (
-            f"[bold green]Auth:[/] [green]{escape(chk.auth.message)}[/]"
+            f"[bold green]Auth:[/] [green]{safe_markup(chk.auth.message)}[/]"
             if chk.auth.is_configured
             else (
-                f"[bold yellow]Auth:[/] [yellow]{escape(chk.auth.message)}[/]"
+                f"[bold yellow]Auth:[/] [yellow]{safe_markup(chk.auth.message)}[/]"
                 if chk.auth.is_required
                 else "[dim]Public Endpoint • No authentication required[/]"
             )
@@ -253,11 +285,11 @@ class OperationRunnerPage(VerticalScroll):
             "Not Downloaded": f"dim {pal.text_muted}",
         }
         tier_style = tier_styles.get(chk.storage_tier, f"dim {pal.text_muted}")
-        tier_badge = f"[dim]Tier:[/] [{tier_style}]{escape(chk.storage_tier)}[/]"
+        tier_badge = f"[dim]Tier:[/] [{tier_style}]{safe_markup(chk.storage_tier)}[/]"
 
         parts = [
-            f"[dim]Back: Ctrl+Left / Esc[/]  •  [dim]API:[/] [bold {pal.secondary}]{escape(chk.provider)}/{escape(chk.api)}[/]  •  {tier_badge}",
-            f"[bold {m_color}]{escape(m)}[/]  [bold {pal.text}]{escape(chk.operation_id)}[/]  [dim {pal.text_muted}]{escape(chk.path)}[/]",
+            f"[dim]Back: Ctrl+Left / Esc[/]  •  [dim]API:[/] [bold {pal.secondary}]{safe_markup(chk.provider)}/{safe_markup(chk.api)}[/]  •  {tier_badge}",
+            f"[bold {m_color}]{safe_markup(m)}[/]  [bold {pal.text}]{safe_markup(chk.operation_id)}[/]  [dim {pal.text_muted}]{safe_markup(chk.path)}[/]",
             auth_line,
         ]
         if summary_line:
@@ -281,14 +313,47 @@ class OperationRunnerPage(VerticalScroll):
         """Collect and type-cast parameter inputs from the form."""
         kwargs: dict[str, Any] = {}
 
-        for p in self.chk.parameters:
+        for idx, p in enumerate(self.chk.parameters):
+            canonical_idx = self._param_index_map.get(id(p), idx)
+            input_id = make_param_input_id(p.name, index=canonical_idx)
+            raw_val = ""
             try:
-                inp = self.query_one(f"#op_input_{p.name}", Input)
+                inp = self.query_one(f"#{input_id}", Input)
                 raw_val = inp.value.strip()
-                if raw_val:
-                    kwargs[p.name] = _parse_typed_value(raw_val, p.type_str)
+            except Exception:
+                # Fallback: search by input widget name attribute
+                try:
+                    for candidate in self.query(Input):
+                        if candidate.name == p.name:
+                            raw_val = candidate.value.strip()
+                            break
+                except Exception:
+                    pass
+
+            if raw_val:
+                kwargs[p.name] = _parse_typed_value(raw_val, p.type_str)
+
+        if self.chk.auth.is_required:
+            try:
+                tok_inp = self.query_one("#op_input__token", Input)
+                tok_val = tok_inp.value.strip()
+                if tok_val:
+                    kwargs["token"] = tok_val
             except Exception:
                 pass
+
+        try:
+            body_inp = self.query_one("#op_input__body", Input)
+            body_val = body_inp.value.strip()
+            if body_val:
+                try:
+                    kwargs["json_body"] = json.loads(body_val)
+                except Exception:
+                    kwargs["json_body"] = body_val
+        except Exception:
+            pass
+
+        return kwargs
 
         if self.chk.auth.is_required:
             try:
@@ -357,7 +422,7 @@ class OperationRunnerPage(VerticalScroll):
 
     def set_executing(self, action_name: str = "Executing request...") -> None:
         header = self.query_one("#op_result_header", Static)
-        header.update(f"[bold cyan]{escape(action_name)}[/]")
+        header.update(f"[bold cyan]{safe_markup(action_name)}[/]")
         body = self.query_one("#op_result_body", Static)
         body.update("")
 
@@ -376,26 +441,26 @@ class OperationRunnerPage(VerticalScroll):
             curl_cmd = res.to_curl()
             if is_curl or "curl" in call_target.lower():
                 header.update(
-                    f"[bold green]cURL Command Generated[/] • [dim]{escape(call_target)}[/]"
+                    f"[bold green]cURL Command Generated[/] • [dim]{safe_markup(call_target)}[/]"
                 )
-                body.update(f"[bold green]cURL Command:[/] {escape(curl_cmd)}")
+                body.update(f"[bold green]cURL Command:[/] {safe_markup(curl_cmd)}")
             else:
                 header.update(
                     f"[bold green]Dry-Run Prepared[/] • "
-                    f"Method: [bold {pal.secondary}]{escape(res.method)}[/] • "
-                    f"URL: [dim]{escape(res.url)}[/]"
+                    f"Method: [bold {pal.secondary}]{safe_markup(res.method)}[/] • "
+                    f"URL: [dim]{safe_markup(res.url)}[/]"
                 )
                 details = [
-                    f"[bold]Method:[/] {res.method}",
-                    f"[bold]URL:[/] {res.url}",
+                    f"[bold]Method:[/] {safe_markup(res.method)}",
+                    f"[bold]URL:[/] {safe_markup(res.url)}",
                 ]
                 if res.headers:
-                    details.append(f"[bold]Headers:[/] {json.dumps(res.headers, indent=2)}")
+                    details.append(f"[bold]Headers:[/] {safe_markup(json.dumps(res.headers, indent=2))}")
                 if res.params:
-                    details.append(f"[bold]Query Params:[/] {json.dumps(res.params, indent=2)}")
+                    details.append(f"[bold]Query Params:[/] {safe_markup(json.dumps(res.params, indent=2))}")
                 if res.json_body is not None:
-                    details.append(f"[bold]JSON Body:[/] {json.dumps(res.json_body, indent=2)}")
-                details.append(f"\n[bold green]cURL:[/] {curl_cmd}")
+                    details.append(f"[bold]JSON Body:[/] {safe_markup(json.dumps(res.json_body, indent=2))}")
+                details.append(f"\n[bold green]cURL:[/] {safe_markup(curl_cmd)}")
                 body.update("\n".join(details))
         elif isinstance(res, MapiResult):
             status_code = getattr(res.metadata, "http_status", 200) or 200
@@ -404,20 +469,20 @@ class OperationRunnerPage(VerticalScroll):
             header.update(
                 f"[bold {status_color}]{status_code} OK[/] • "
                 f"Latency: [cyan]{dur}ms[/] • "
-                f"Target: [bold {pal.secondary}]{escape(call_target)}[/]"
+                f"Target: [bold {pal.secondary}]{safe_markup(call_target)}[/]"
             )
             if isinstance(res.data, (dict, list)):
                 body.update(JSON.from_data(res.data, indent=2))
             else:
-                body.update(str(res.data))
+                body.update(safe_markup(str(res.data)))
         else:
             header.update(
-                f"[bold green]Result[/] • Target: [bold {pal.secondary}]{escape(call_target)}[/]"
+                f"[bold green]Result[/] • Target: [bold {pal.secondary}]{safe_markup(call_target)}[/]"
             )
-            body.update(str(res))
+            body.update(safe_markup(str(res)))
 
     def display_error(self, error_msg: str, call_target: str) -> None:
         header = self.query_one("#op_result_header", Static)
-        header.update(f"[bold red]Request Failed[/] • Target: [bold]{escape(call_target)}[/]")
+        header.update(f"[bold red]Request Failed[/] • Target: [bold]{safe_markup(call_target)}[/]")
         body = self.query_one("#op_result_body", Static)
-        body.update(f"[red]{escape(error_msg)}[/]")
+        body.update(f"[red]{safe_markup(error_msg)}[/]")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from mapi import Mapi
-from textual.widgets import DataTable, Input, OptionList
+from textual.widgets import Button, DataTable, Input, OptionList
 
 from mapi_cli.paths import resolve_data_dir
 from mapi_cli.ui.banner import MAPI_ASCII_ART, render_banner
@@ -423,6 +423,52 @@ async def test_main_tui_operation_runner_page_interaction():
         assert app.current_view == "operations"
         assert table.has_focus
         assert app.selected_operation == selected_op_id
+
+
+@pytest.mark.asyncio
+async def test_main_tui_discord_create_message_and_bracket_commands():
+    """Verify Discord create_message with files[0] brackets and command palette [/] do not crash."""
+    data_dir, _ = resolve_data_dir()
+    client = Mapi(data_dir=data_dir)
+    app = MapiTUIApp(client=client, data_dir=data_dir)
+
+    async with app.run_test() as pilot:
+        # Navigate to discord -> REST
+        app._show_operations_for("discord", "REST")
+        await pilot.pause()
+        assert app.current_view == "operations"
+
+        # Open create_message runner page (contains files[0]...files[9])
+        app._open_operation_page("create_message")
+        await pilot.pause()
+
+        runner_page = app.query_one(OperationRunnerPage)
+        assert runner_page is not None
+        assert app.current_view == "operation_detail"
+
+        # Verify bracket input widget exists and has valid DOM ID and param name
+        file0_inp = runner_page.query_one("#op_input_14_files_0", Input)
+        assert file0_inp.name == "files[0]"
+
+        # Enter a value and verify get_collected_inputs
+        file0_inp.value = "my_attachment.png"
+        await pilot.pause()
+        collected = runner_page.get_collected_inputs()
+        assert collected["files[0]"] == "my_attachment.png"
+
+        # Verify command palette handles [/] and / without MarkupError
+        app._execute_command("[/]")
+        await pilot.pause()
+
+        app._execute_command("/")
+        await pilot.pause()
+
+        # Return back to operations
+        btn_back = runner_page.query_one("#btn_back", Button)
+        btn_back.action_press()
+        await pilot.pause()
+        assert app.current_view == "operations"
+
 
 
 

@@ -35,7 +35,7 @@ from mapi_cli.paths import resolve_data_dir
 from mapi_cli.storage import get_api_storage_tier
 from mapi_cli.ui.banner import render_banner
 from mapi_cli.ui.command_palette import filter_commands
-from mapi_cli.ui.operation_view import OperationRunnerPage
+from mapi_cli.ui.operation_view import OperationRunnerPage, safe_markup
 from mapi_cli.ui.styles import CELADON_DARK, CELADON_LIGHT, build_app_tcss, method_style
 
 
@@ -484,7 +484,7 @@ class MapiTUIApp(App[None]):
                 timeout=8,
             )
         else:
-            self.notify(f"Unknown command '{cmd_str}'. Type '/' for list of commands.", severity="warning")
+            self.notify(f"Unknown command '{cmd_str}'. Type '/' for list of commands.", severity="warning", markup=False)
 
         self.query_one("#catalog_table", DataTable).focus()
 
@@ -821,7 +821,7 @@ class MapiTUIApp(App[None]):
 
         if chk.required_parameters:
             req_list = [
-                f"[bold red]{escape(p.name)}[/]({p.in_}:{p.type_str})"
+                f"[bold red]{safe_markup(p.name)}[/]({safe_markup(p.in_)}:{safe_markup(p.type_str)})"
                 for p in chk.required_parameters
             ]
             req_str = ", ".join(req_list)
@@ -829,7 +829,10 @@ class MapiTUIApp(App[None]):
             req_str = "[dim]None[/]"
 
         if chk.optional_parameters:
-            opt_list = [f"{escape(p.name)}({p.in_}:{p.type_str})" for p in chk.optional_parameters]
+            opt_list = [
+                f"{safe_markup(p.name)}({safe_markup(p.in_)}:{safe_markup(p.type_str)})"
+                for p in chk.optional_parameters
+            ]
             opt_str = ", ".join(opt_list[:4])
             if len(opt_list) > 4:
                 opt_str += f" (+{len(opt_list) - 4} more)"
@@ -838,15 +841,15 @@ class MapiTUIApp(App[None]):
 
         auth_msg = chk.auth.message
         if chk.auth.is_required and not chk.auth.is_configured:
-            auth_display = f"[bold yellow]Auth:[/] {escape(auth_msg)}"
+            auth_display = f"[bold yellow]Auth:[/] {safe_markup(auth_msg)}"
         elif chk.auth.is_required:
-            auth_display = f"[bold green]Auth:[/] {escape(auth_msg)}"
+            auth_display = f"[bold green]Auth:[/] {safe_markup(auth_msg)}"
         else:
-            auth_display = f"[dim]Auth:[/] {escape(auth_msg)}"
+            auth_display = f"[dim]Auth:[/] {safe_markup(auth_msg)}"
 
         status_text.update(
-            f"[bold green]{escape(chk.method)}[/] [bold {pal.secondary}]{escape(chk.path)}[/] • "
-            f"ID: [bold {pal.text}]{escape(chk.operation_id)}[/] • "
+            f"[bold green]{safe_markup(chk.method)}[/] [bold {pal.secondary}]{safe_markup(chk.path)}[/] • "
+            f"ID: [bold {pal.text}]{safe_markup(chk.operation_id)}[/] • "
             f"[bold]Req:[/] {req_str} • "
             f"[dim]Opt:[/] {opt_str} • "
             f"{auth_display}"
@@ -1035,8 +1038,8 @@ class MapiTUIApp(App[None]):
             except Exception:
                 pass
             status_text = self.query_one("#status_text", Static)
-            status_text.update(f"[bold red]Cannot Call:[/] {chk.status_summary}")
-            self.notify(chk.status_summary, title="Requirements Not Met", severity="warning")
+            status_text.update(f"[bold red]Cannot Call:[/] {safe_markup(chk.status_summary)}")
+            self.notify(chk.status_summary, title="Requirements Not Met", severity="warning", markup=False)
             return
 
         self._run_call(
@@ -1109,7 +1112,7 @@ class MapiTUIApp(App[None]):
         try:
             temp_chk = check_operation_requirements(self.client, provider, api, target_op)
         except Exception as exc:
-            self.notify(f"Could not load operation '{target_op}': {exc}", severity="error")
+            self.notify(f"Could not load operation '{target_op}': {exc}", severity="error", markup=False)
             return
 
         form_kwargs: dict[str, Any] = {}
@@ -1126,7 +1129,7 @@ class MapiTUIApp(App[None]):
 
         if not chk.can_execute and not (dry_run or emit_curl):
             status_text = self.query_one("#status_text", Static)
-            status_text.update(f"[bold red]Cannot Call:[/] {chk.status_summary}")
+            status_text.update(f"[bold red]Cannot Call:[/] {safe_markup(chk.status_summary)}")
             if self.current_view == "operation_detail":
                 try:
                     page = self.query_one(OperationRunnerPage)
@@ -1136,7 +1139,7 @@ class MapiTUIApp(App[None]):
                     )
                 except Exception:
                     pass
-            self.notify(chk.status_summary, title="Requirements Not Met", severity="warning")
+            self.notify(chk.status_summary, title="Requirements Not Met", severity="warning", markup=False)
             return
 
         self._run_call(chk, kwargs, dry_run=dry_run, emit_curl=emit_curl)
@@ -1198,7 +1201,7 @@ class MapiTUIApp(App[None]):
                     status_text.update,
                     f"[bold green]✓ Dry-Run:[/] {res.method} {escape(res.url)} • Headers: {len(res.headers)}",
                 )
-                self.notify(f"Dry run ready: {res.method} {res.url}", title="Dry Run")
+                self.notify(f"Dry run ready: {res.method} {res.url}", title="Dry Run", markup=False)
                 if runner_page:
                     self.call_from_thread(runner_page.display_result, res, f"Dry-Run {call_target}")
             elif isinstance(res, MapiResult):
@@ -1217,12 +1220,13 @@ class MapiTUIApp(App[None]):
                 self.call_from_thread(
                     status_text.update,
                     f"[bold green]✓ {status_code} OK[/] [dim]({duration_ms}ms)[/] • "
-                    f"[bold {pal.secondary}]{call_target}[/] • [dim]{escape(data_summary)}[/]",
+                    f"[bold {pal.secondary}]{call_target}[/] • [dim]{safe_markup(data_summary)}[/]",
                 )
                 self.notify(
                     f"{status_code} OK ({duration_ms}ms)\n{data_summary}",
                     title=f"Call Succeeded: {chk.operation_id}",
                     timeout=8,
+                    markup=False,
                 )
                 if runner_page:
                     self.call_from_thread(runner_page.display_result, res, call_target, duration_ms)
@@ -1230,9 +1234,9 @@ class MapiTUIApp(App[None]):
             err_msg = str(exc)
             self.call_from_thread(
                 status_text.update,
-                f"[bold red]✗ Call Failed:[/] {escape(err_msg)}",
+                f"[bold red]✗ Call Failed:[/] {safe_markup(err_msg)}",
             )
-            self.notify(f"Call failed: {err_msg}", title="Call Error", severity="error")
+            self.notify(f"Call failed: {err_msg}", title="Call Error", severity="error", markup=False)
             if runner_page:
                 self.call_from_thread(runner_page.display_error, err_msg, call_target)
         finally:
