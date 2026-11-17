@@ -5,51 +5,51 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class CeladonPalette:
-    """Color palette design tokens for slim, transparent-shell Celadon Green theme."""
+    """Color palette design tokens for calm, simple, transparent-shell theme."""
 
     name: str
     is_dark: bool
     bg: str              # "transparent" to respect host terminal emulator theme
     surface: str         # "transparent" to avoid bulky opaque boxes
     surface_active: str  # Elevated surface for dropdowns/modals
-    border: str          # Subtle component border
-    border_focus: str    # Focus border (vibrant green)
-    primary: str         # Primary green
-    secondary: str       # Secondary mint/bright green
-    accent: str          # Classic Celadon highlight
-    text: str            # High-contrast readable green text
-    text_muted: str      # Subtitles, hints, and secondary sage text
-    highlight: str       # Table cursor selection highlight
+    border: str          # Subtle neutral component border
+    border_focus: str    # Clean accent focus border
+    primary: str         # Calm brand accent (soft sage celadon)
+    secondary: str       # Secondary calm accent for shortcuts/badges
+    accent: str          # Soft highlight
+    text: str            # High-contrast readable calm neutral text
+    text_muted: str      # Calm muted text for secondary details
+    highlight: str       # Subtle cursor selection highlight
 
 
 CELADON_DARK = CeladonPalette(
-    name="Celadon Dark",
+    name="Calm Dark",
     is_dark=True,
-    bg="transparent",       # Inherit user's dark shell background
-    surface="transparent",  # Slim & non-bulky layout
-    surface_active="#1B2A25",# Translucent dark green for menus
-    border="#2E4A40",       # Slim celadon border
-    border_focus="#7EE0D2", # Mint glow focus border
-    primary="#7EE0D2",      # Vibrant mint green
-    secondary="#55FF99",    # Bright terminal green
-    accent="#ACE1AF",       # Classic pale celadon
-    text="#ACE1AF",         # Primary celadon green text
-    text_muted="#7E9F93",   # Soft sage green for secondary text
-    highlight="#1E3A32",    # Subtle table cursor highlight
+    bg="transparent",        # Inherit user's dark shell background
+    surface="transparent",   # Slim & non-bulky layout
+    surface_active="#161B22",# Calm dark slate surface for dropdowns
+    border="#30363D",        # Subtle slate gray border
+    border_focus="#58A6FF",  # Clean focus border
+    primary="#6CB6A8",       # Soft, calm sage celadon
+    secondary="#79C0FF",     # Calm soft blue for commands/shortcuts
+    accent="#A5D6A7",        # Soft calm mint accent
+    text="#E6EDF3",          # Crisp readable neutral text
+    text_muted="#8B949E",    # Calm neutral muted gray
+    highlight="#21262D",     # Subtle table cursor highlight
 )
 
 CELADON_LIGHT = CeladonPalette(
-    name="Celadon Light",
+    name="Calm Light",
     is_dark=False,
-    bg="transparent",       # Inherit user's light shell background
-    surface="transparent",  # Slim & non-bulky layout
-    surface_active="#DDECE6",# Translucent light celadon for menus
-    border="#A4C2B7",       # Slim sage border
-    border_focus="#2F847C", # Deep jade focus border
-    primary="#2F847C",      # Deep jade green
-    secondary="#1A524C",    # Deep forest green
-    accent="#263832",       # Slate green accent
-    text="#1B3B32",         # High-contrast dark green text
-    text_muted="#5C7A70",   # Muted sage green
-    highlight="#CCE3DC",    # Soft light green cursor highlight
+    bg="transparent",        # Inherit user's light shell background
+    surface="transparent",   # Slim & non-bulky layout
+    surface_active="#F6F8FA",# Clean off-white surface for dropdowns
+    border="#D0D7DE",        # Subtle light gray border
+    border_focus="#0969DA",  # Clean blue focus border
+    primary="#2D6A5D",       # Soft slate celadon
+    secondary="#0969DA",     # Clean blue for commands/shortcuts
+    accent="#1A7F37",        # Soft green accent
+    text="#1F2328",          # Crisp readable dark slate text
+    text_muted="#656D76",    # Calm muted slate
+    highlight="#EAEEF2",     # Soft light gray cursor highlight
 )

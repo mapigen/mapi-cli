@@ -21,11 +21,11 @@ def build_app_tcss(
         dock: top;
         height: 1;
         background: {dark.bg};
-        color: {dark.primary};
+        color: {dark.text_muted};
     }}
 
     HeaderTitle {{
-        color: {dark.secondary};
+        color: {dark.text};
         text-style: bold;
     }}
 
@@ -63,39 +63,7 @@ def build_app_tcss(
         margin: 0;
     }}
 
-    /* Inputs (Command Palette & Filter) - Slim & Modern */
-    #command_input, #filter_input {{
-        margin: 0;
-        padding: 0 1;
-        background: {dark.bg};
-        border: round {dark.border};
-        color: {dark.secondary};
-        height: 3;
-    }}
-
-    #command_input:focus, #filter_input:focus {{
-        border: round {dark.border_focus};
-    }}
-
-    /* Suggestions Dropdown */
-    #suggestions_container {{
-        height: auto;
-        max-height: 8;
-        display: none;
-        background: {dark.surface_active};
-        border: round {dark.border_focus};
-        margin: 0;
-        padding: 0;
-    }}
-
-    #suggestions_list {{
-        background: transparent;
-        height: auto;
-        max-height: 7;
-        color: {dark.text};
-    }}
-
-    /* Data Tables - Slim with host shell transparency */
+    /* Data Tables - Center Canvas */
     #table_container {{
         height: 1fr;
         padding: 0 1;
@@ -114,17 +82,56 @@ def build_app_tcss(
 
     DataTable > .datatable--cursor {{
         background: {dark.highlight};
-        color: {dark.secondary};
+        color: #FFFFFF;
         text-style: bold;
     }}
 
     DataTable > .datatable--header {{
         background: {dark.surface};
-        color: {dark.primary};
+        color: {dark.text_muted};
         text-style: bold;
     }}
 
-    /* Status & Loading Indicator - Slim 1-row layout */
+    /* Bottom Command & Search Bar */
+    #command_container {{
+        height: auto;
+        padding: 0 1;
+        margin: 0;
+        background: {dark.surface};
+    }}
+
+    #command_input, #filter_input {{
+        margin: 0;
+        padding: 0 1;
+        background: {dark.bg};
+        border: round {dark.border};
+        color: {dark.text};
+        height: 3;
+    }}
+
+    #command_input:focus, #filter_input:focus {{
+        border: round {dark.border_focus};
+    }}
+
+    /* Suggestions Dropdown (Pops up above bottom input) */
+    #suggestions_container {{
+        height: auto;
+        max-height: 8;
+        display: none;
+        background: {dark.surface_active};
+        border: round {dark.border_focus};
+        margin: 0 0 1 0;
+        padding: 0;
+    }}
+
+    #suggestions_list {{
+        background: transparent;
+        height: auto;
+        max-height: 7;
+        color: {dark.text};
+    }}
+
+    /* Status & Loading Indicator - Slim bottom layout */
     #status_panel {{
         height: auto;
         min-height: 1;
@@ -155,7 +162,11 @@ def build_app_tcss(
 
     Screen.light-mode Header {{
         background: {light.bg};
-        color: {light.primary};
+        color: {light.text_muted};
+    }}
+
+    Screen.light-mode HeaderTitle {{
+        color: {light.text};
     }}
 
     Screen.light-mode Footer {{
@@ -164,7 +175,7 @@ def build_app_tcss(
 
     Screen.light-mode Footer > .footer--key {{
         background: {light.bg};
-        color: {light.primary};
+        color: {light.secondary};
     }}
 
     Screen.light-mode Footer > .footer--description {{
@@ -178,25 +189,6 @@ def build_app_tcss(
 
     Screen.light-mode #path_label {{
         color: {light.text_muted};
-    }}
-
-    Screen.light-mode #command_input, Screen.light-mode #filter_input {{
-        background: {light.bg};
-        border: round {light.border};
-        color: {light.text};
-    }}
-
-    Screen.light-mode #command_input:focus, Screen.light-mode #filter_input:focus {{
-        border: round {light.border_focus};
-    }}
-
-    Screen.light-mode #suggestions_container {{
-        background: {light.surface_active};
-        border: round {light.border_focus};
-    }}
-
-    Screen.light-mode #suggestions_list {{
-        color: {light.text};
     }}
 
     Screen.light-mode #table_container {{
@@ -214,14 +206,38 @@ def build_app_tcss(
 
     Screen.light-mode DataTable > .datatable--cursor {{
         background: {light.highlight};
-        color: {light.secondary};
+        color: #000000;
         text-style: bold;
     }}
 
     Screen.light-mode DataTable > .datatable--header {{
         background: {light.surface};
-        color: {light.primary};
+        color: {light.text_muted};
         text-style: bold;
+    }}
+
+    Screen.light-mode #command_container {{
+        background: {light.surface};
+    }}
+
+    Screen.light-mode #command_input, Screen.light-mode #filter_input {{
+        background: {light.bg};
+        border: round {light.border};
+        color: {light.text};
+    }}
+
+    Screen.light-mode #command_input:focus, Screen.light-mode #filter_input:focus {{
+        border: round {light.border_focus};
+    }}
+
+    Screen.light-mode #suggestions_container {{
+        background: {light.surface_active};
+        border: round {light.border_focus};
+        margin: 0 0 1 0;
+    }}
+
+    Screen.light-mode #suggestions_list {{
+        color: {light.text};
     }}
 
     Screen.light-mode #status_panel {{
@@ -234,6 +250,6 @@ def build_app_tcss(
     }}
 
     Screen.light-mode #loader {{
-        color: {light.primary};
+        color: {light.secondary};
     }}
     """.strip()

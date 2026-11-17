@@ -17,15 +17,15 @@ MAPI_ASCII_ART = MAPI_ASCII_ART_SLIM
 
 
 def render_banner(is_dark: bool = True) -> Text:
-    """Render slim, elegant MAPI ASCII text art with Celadon Green styling."""
+    """Render slim, elegant MAPI ASCII text art with calm styling."""
     palette = CELADON_DARK if is_dark else CELADON_LIGHT
     art_text = Text()
 
     lines = MAPI_ASCII_ART_SLIM.split("\n")
     for line in lines:
-        art_text.append(line + "\n", style=f"bold {palette.text}")
+        art_text.append(line + "\n", style=f"bold {palette.primary}")
 
-    art_text.append("  ⬡ Universal API Discovery Engine", style=f"bold {palette.primary}")
+    art_text.append("  ⬡ Universal API Discovery Engine", style=f"bold {palette.text}")
     art_text.append(" • Type ", style=f"{palette.text_muted}")
     art_text.append("/", style=f"bold {palette.secondary}")
     art_text.append(" for commands\n", style=f"{palette.text_muted}")

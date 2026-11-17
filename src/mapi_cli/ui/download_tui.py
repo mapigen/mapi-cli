@@ -60,15 +60,16 @@ class DownloadTUIApp(App[None]):
         with Vertical(id="header_container"):
             yield Static(render_banner(self.is_dark), id="banner_static")
             yield Label(
-                f"Platform Storage: [cyan]{self.data_dir}[/] • Force mode: [yellow]{'ON' if self.force else 'OFF'}[/]",
+                f"Platform Storage: [dim]{self.data_dir}[/] • Force mode: [{'bold yellow' if self.force else 'dim'}{'ON' if self.force else 'OFF'}[/]",
                 id="path_label",
-            )
-            yield Input(
-                placeholder="Type '/' to filter providers, APIs, or categories (Press 'Enter' to download selected)...",
-                id="filter_input",
             )
         with Vertical(id="table_container"):
             yield DataTable(id="providers_table", cursor_type="row")
+        with Vertical(id="command_container"):
+            yield Input(
+                placeholder="Type '/' or text to filter providers/APIs (Press 'Enter' to download selected)...",
+                id="filter_input",
+            )
         with Vertical(id="status_panel"):
             yield LoadingIndicator(id="loader")
             yield Static(
@@ -150,10 +151,10 @@ class DownloadTUIApp(App[None]):
             status_str = "Downloaded" if is_dl else "Not Downloaded"
 
             table.add_row(
-                Text(p, style=f"bold {pal.secondary}"),
-                Text(a, style=pal.text),
+                Text(p, style=f"bold {pal.text}"),
+                Text(a, style=pal.secondary),
                 Text(status_str, style=status_style),
-                Text(ops, style=pal.primary),
+                Text(ops, style=pal.text_muted),
                 Text(url or "(no remote spec)", style=f"dim {pal.text_muted}"),
                 key=row_key,
             )

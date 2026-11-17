@@ -75,14 +75,15 @@ class MapiTUIApp(App[None]):
         yield Header(show_clock=True)
         with Vertical(id="header_container"):
             yield Static(render_banner(self.is_dark), id="banner_static")
+        with Vertical(id="table_container"):
+            yield DataTable(id="catalog_table", cursor_type="row")
+        with Vertical(id="command_container"):
+            with Vertical(id="suggestions_container"):
+                yield OptionList(id="suggestions_list")
             yield Input(
                 placeholder="Type '/' for intelligent commands (e.g. /apis, /download, /theme) or type to filter...",
                 id="command_input",
             )
-            with Vertical(id="suggestions_container"):
-                yield OptionList(id="suggestions_list")
-        with Vertical(id="table_container"):
-            yield DataTable(id="catalog_table", cursor_type="row")
         with Vertical(id="status_panel"):
             yield LoadingIndicator(id="loader")
             yield Static(
@@ -171,10 +172,10 @@ class MapiTUIApp(App[None]):
             status_str = "Downloaded" if is_dl else "Not Downloaded"
 
             table.add_row(
-                Text(p, style=f"bold {pal.secondary}"),
-                Text(a, style=pal.text),
+                Text(p, style=f"bold {pal.text}"),
+                Text(a, style=pal.secondary),
                 Text(status_str, style=status_style),
-                Text(ops, style=pal.primary),
+                Text(ops, style=pal.text_muted),
                 Text(auth, style=f"dim {pal.text_muted}"),
                 Text(url or "(no remote spec)", style=f"dim {pal.text_muted}"),
                 key=row_key,
@@ -242,8 +243,8 @@ class MapiTUIApp(App[None]):
                 pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
                 for cmd in matches:
                     line = Text()
-                    line.append(f"{cmd.command:<14}", style=f"bold {pal.primary}")
-                    line.append(f"{cmd.title:<24}", style=f"bold {pal.secondary}")
+                    line.append(f"{cmd.command:<14}", style=f"bold {pal.secondary}")
+                    line.append(f"{cmd.title:<24}", style=f"bold {pal.text}")
                     line.append(f" {cmd.description}", style=f"dim {pal.text_muted}")
                     opt_list.add_option(Option(prompt=line, id=cmd.command))
                 opt_list.highlighted = 0
