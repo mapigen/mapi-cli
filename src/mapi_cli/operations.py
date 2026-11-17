@@ -11,6 +11,9 @@ from mapi.models.domain import ParameterRef
 from mapi.models.request import RequestConfig
 from mapi.models.response import MapiResult
 
+from mapi_cli.paths import resolve_data_dir
+from mapi_cli.storage import get_api_storage_tier
+
 log = logging.getLogger(__name__)
 
 
@@ -107,6 +110,9 @@ class OperationRequirementCheck:
     can_execute: bool = False
     status_summary: str = ""
     example_call: str = ""
+    storage_tier: str = "Not Downloaded"
+    is_compressed: bool = False
+    is_cached: bool = False
 
 
 def check_operation_requirements(
@@ -253,6 +259,18 @@ def check_operation_requirements(
     arg_hints = [f"{p.name}=<{p.type_str}>" for p in missing_params]
     example_call = f"/call {' '.join(arg_hints)}" if arg_hints else "/call"
 
+    # Inspect storage & cache tier
+    try:
+        data_dir, _ = resolve_data_dir()
+        tier_info = get_api_storage_tier(client, data_dir, provider, api, src)
+        tier_status = tier_info.status
+        is_comp = tier_info.is_compressed
+        is_cch = tier_info.is_cached
+    except Exception:
+        tier_status = "Not Downloaded"
+        is_comp = False
+        is_cch = False
+
     return OperationRequirementCheck(
         provider=provider,
         api=api,
@@ -270,6 +288,9 @@ def check_operation_requirements(
         can_execute=can_execute,
         status_summary=status_summary,
         example_call=example_call,
+        storage_tier=tier_status,
+        is_compressed=is_comp,
+        is_cached=is_cch,
     )
 
 

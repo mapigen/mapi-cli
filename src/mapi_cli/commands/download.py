@@ -13,20 +13,16 @@ from rich.table import Table
 from mapi_cli.completion import complete_api, complete_provider
 from mapi_cli.context import CliContext
 from mapi_cli.output import emit_output
-from mapi_cli.paths import MAPI_EXT_ZST, resolve_data_dir
+from mapi_cli.paths import resolve_data_dir
 from mapi_cli.resolution import resolve_provider_and_api
+from mapi_cli.storage import is_api_local
 from mapi_cli.tools.models import CompileConfig, SpecSourceConfig
 from mapi_cli.tools.pipeline import process_service
 from mapi_cli.ui.console import console
 
 
 def _is_api_local(data_dir: Path, provider: str, source: str, api: str) -> bool:
-    s_dir = data_dir / provider / source / api
-    return (
-        (s_dir / f"{api}{MAPI_EXT_ZST}").exists()
-        or (s_dir / f"{api}.mapi.json").exists()
-        or (s_dir / f"{api}.mapi.msgpack.zst").exists()
-    )
+    return is_api_local(data_dir, provider, source, api)
 
 
 def _download_and_compile(

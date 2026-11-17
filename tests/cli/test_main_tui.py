@@ -52,6 +52,12 @@ async def test_main_tui_app_lifecycle_and_theme():
         table = pilot.app.query_one("#catalog_table", DataTable)
         assert table.row_count >= 5
 
+        # Check catalog table rows display tier status values
+        for row_idx in range(min(5, table.row_count)):
+            row_data = table.get_row_at(row_idx)
+            status_cell = str(row_data[2])
+            assert any(s in status_cell for s in ("Cached", "Compressed", "Downloaded", "Not Downloaded"))
+
         # Check theme toggle (default dark -> light -> dark)
         assert app.is_dark is True
         await pilot.press("t")
@@ -345,6 +351,28 @@ async def test_main_tui_operation_runner_page_interaction():
         header_text = str(header_static.render())
         assert "ability_retrieve" in header_text
         assert "GET" in header_text
+        assert "Tier:" in header_text
+        assert any(
+            tier in header_text
+            for tier in ("Cached", "Compressed", "Downloaded", "Not Downloaded")
+        )
+
+        # Check action button labels (NO emojis)
+        btn_run = runner_page.query_one("#btn_run", Button)
+        btn_dry = runner_page.query_one("#btn_dry", Button)
+        btn_curl = runner_page.query_one("#btn_curl", Button)
+        btn_back = runner_page.query_one("#btn_back", Button)
+        assert str(btn_run.label) == "Run Request"
+        assert str(btn_dry.label) == "Dry Run"
+        assert str(btn_curl.label) == "cURL"
+        assert str(btn_back.label) == "Back to Operations"
+
+        forbidden_emojis = ["▶", "⚡", "📋", "←", "🔒", "🔓", "⏳", "✓", "✗"]
+        for btn in (btn_run, btn_dry, btn_curl, btn_back):
+            for emoji in forbidden_emojis:
+                assert emoji not in str(btn.label)
+        for emoji in forbidden_emojis:
+            assert emoji not in header_text
 
         # Check parameter inputs form
         id_input = runner_page.query_one("#op_input_id", Input)
@@ -352,14 +380,16 @@ async def test_main_tui_operation_runner_page_interaction():
         assert id_input.value == ""
 
         # 3. Test missing parameters validation on Run button
-        btn_run = runner_page.query_one("#btn_run", Button)
         btn_run.action_press()
         await pilot.pause()
 
         result_header = runner_page.query_one("#op_result_header")
         result_body = runner_page.query_one("#op_result_body")
-        assert "Request Failed" in str(result_header.render())
+        result_header_text = str(result_header.render())
+        assert "Request Failed" in result_header_text
         assert "Missing argument(s)" in str(result_body.render())
+        for emoji in forbidden_emojis:
+            assert emoji not in result_header_text
 
         # 4. Fill in the requirement (id=1)
         id_input.value = "1"
@@ -369,18 +399,22 @@ async def test_main_tui_operation_runner_page_interaction():
         assert collected.get("id") == "1"
 
         # 5. Click Dry-Run button
-        btn_dry = runner_page.query_one("#btn_dry", Button)
         btn_dry.action_press()
         await pilot.pause(0.2)
-        assert "Dry-Run Prepared" in str(result_header.render())
+        dry_header_text = str(result_header.render())
+        assert "Dry-Run Prepared" in dry_header_text
         assert "https://pokeapi.co/api/v2/ability/1" in str(result_body.render())
+        for emoji in forbidden_emojis:
+            assert emoji not in dry_header_text
 
         # 6. Click cURL button
-        btn_curl = runner_page.query_one("#btn_curl", Button)
         btn_curl.action_press()
         await pilot.pause(0.2)
-        assert "cURL Command Generated" in str(result_header.render())
+        curl_header_text = str(result_header.render())
+        assert "cURL Command Generated" in curl_header_text
         assert "curl" in str(result_body.render()).lower()
+        for emoji in forbidden_emojis:
+            assert emoji not in curl_header_text
 
         # 7. Click Back button to return to operations list
         btn_back = runner_page.query_one("#btn_back", Button)

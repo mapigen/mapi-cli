@@ -18,8 +18,9 @@ from textual.widgets import (
     Static,
 )
 
-from mapi_cli.commands.download import _download_and_compile, _is_api_local
+from mapi_cli.commands.download import _download_and_compile
 from mapi_cli.paths import resolve_data_dir
+from mapi_cli.storage import get_api_storage_tier
 from mapi_cli.ui.banner import render_banner
 from mapi_cli.ui.styles import CELADON_DARK, CELADON_LIGHT, build_app_tcss
 
@@ -113,11 +114,18 @@ class DownloadTUIApp(App[None]):
                     source = sources[0] if sources else "github"
                     spec_url = getattr(info, "spec_url", "") or ""
                     ops_count = getattr(info, "operation_count", 0)
-                    is_local = _is_api_local(self.data_dir, p, source, a)
+                    tier = get_api_storage_tier(self.client, self.data_dir, p, a, source)
+                    tier_status = tier.status
+                    is_cached = tier.is_cached
+                    is_comp = tier.is_compressed
+                    is_local = tier.is_downloaded
                 except Exception:
                     source = "github"
                     spec_url = ""
                     ops_count = 0
+                    tier_status = "Not Downloaded"
+                    is_cached = False
+                    is_comp = False
                     is_local = False
 
                 self._all_items.append(
@@ -127,6 +135,9 @@ class DownloadTUIApp(App[None]):
                         "source": source,
                         "spec_url": spec_url,
                         "operations": ops_count,
+                        "status": tier_status,
+                        "is_cached": is_cached,
+                        "is_compressed": is_comp,
                         "downloaded": is_local,
                     }
                 )
@@ -163,8 +174,15 @@ class DownloadTUIApp(App[None]):
 
             row_key = f"{p}/{a}"
             pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
-            status_style = "bold green" if is_dl else f"dim {pal.text_muted}"
-            status_str = "Downloaded" if is_dl else "Not Downloaded"
+            status_str = item.get("status", "Downloaded" if is_dl else "Not Downloaded")
+            if status_str == "Cached":
+                status_style = f"bold {pal.secondary}"
+            elif status_str == "Compressed":
+                status_style = f"bold {pal.primary}"
+            elif status_str == "Downloaded":
+                status_style = "bold green"
+            else:
+                status_style = f"dim {pal.text_muted}"
 
             table.add_row(
                 Text(p, style=f"bold {pal.text}"),
@@ -293,7 +311,15 @@ class DownloadTUIApp(App[None]):
         row_key = f"{provider}/{api}"
 
         if status == "downloaded":
-            new_status = Text("Downloaded", style="bold green")
+            tier = get_api_storage_tier(self.client, self.data_dir, provider, api)
+            pal = CELADON_DARK if self.is_dark else CELADON_LIGHT
+            if tier.status == "Cached":
+                new_style = f"bold {pal.secondary}"
+            elif tier.status == "Compressed":
+                new_style = f"bold {pal.primary}"
+            else:
+                new_style = "bold green"
+            new_status = Text(tier.status, style=new_style)
             ops_text = Text(str(res.get("operations", 0)), style="green")
             self.call_from_thread(table.update_cell, row_key, "status", new_status)
             self.call_from_thread(table.update_cell, row_key, "ops", ops_text)

@@ -24,7 +24,11 @@ def build_providers_table(provider_data: list[dict[str, Any]]) -> Table:
 
     for item in provider_data:
         raw_status = str(item.get("status", "Not Downloaded"))
-        if raw_status == "Downloaded":
+        if raw_status == "Cached":
+            status_badge = "[bold magenta]Cached[/]"
+        elif raw_status == "Compressed":
+            status_badge = "[bold cyan]Compressed[/]"
+        elif raw_status == "Downloaded":
             status_badge = "[bold green]Downloaded[/]"
         elif raw_status == "Not Downloaded":
             status_badge = "[dim yellow]Not Downloaded[/]"
@@ -48,13 +52,27 @@ def build_apis_table(provider: str, api_data: list[dict[str, Any]]) -> Table:
         header_style="bold cyan",
     )
     table.add_column("API", style="api", no_wrap=True)
+    table.add_column("Status", justify="center")
     table.add_column("Sources", style="dim")
     table.add_column("Operations", justify="right", style="green")
     table.add_column("Primary Auth", style="yellow")
 
     for item in api_data:
+        raw_status = str(item.get("status", "Not Downloaded"))
+        if raw_status == "Cached":
+            status_badge = "[bold magenta]Cached[/]"
+        elif raw_status == "Compressed":
+            status_badge = "[bold cyan]Compressed[/]"
+        elif raw_status == "Downloaded":
+            status_badge = "[bold green]Downloaded[/]"
+        elif raw_status == "Not Downloaded":
+            status_badge = "[dim yellow]Not Downloaded[/]"
+        else:
+            status_badge = f"[cyan]{raw_status}[/]"
+
         table.add_row(
             item["api"],
+            status_badge,
             ", ".join(item.get("sources", [])),
             str(item.get("operation_count", 0)),
             item.get("primary_auth", "none"),

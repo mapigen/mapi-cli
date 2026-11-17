@@ -8,6 +8,7 @@ from mapi_cli.completion import complete_api, complete_provider
 from mapi_cli.context import CliContext
 from mapi_cli.output import emit_output
 from mapi_cli.resolution import resolve_service_query
+from mapi_cli.storage import get_api_storage_tier
 from mapi_cli.ui.tables import build_apis_table
 
 
@@ -70,9 +71,12 @@ def list_apis(
         for a in apis:
             try:
                 info = client.discovery.get_api_info(provider, a)
+                tier = get_api_storage_tier(client, c_ctx.data_dir, provider, a)
                 api_data.append(
                     {
                         "api": a,
+                        "status": tier.status,
+                        "downloaded": tier.is_downloaded,
                         "sources": info.sources,
                         "operation_count": info.operation_count,
                         "primary_auth": info.primary_auth,
@@ -82,6 +86,8 @@ def list_apis(
                 api_data.append(
                     {
                         "api": a,
+                        "status": "Not Downloaded",
+                        "downloaded": False,
                         "sources": [],
                         "operation_count": 0,
                         "primary_auth": "none",

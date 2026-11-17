@@ -130,10 +130,10 @@ class OperationRunnerPage(VerticalScroll):
                     f"[bold {pal.secondary}]Authentication ({self.chk.auth.primary_auth}):[/]",
                     classes="op-group-title",
                 )
-                status_icon = "✓" if self.chk.auth.is_configured else "!"
+                status_badge = "[CONFIGURED]" if self.chk.auth.is_configured else "[REQUIRED]"
                 status_color = "green" if self.chk.auth.is_configured else "yellow"
                 yield Static(
-                    f"[{status_color}]{status_icon} {escape(self.chk.auth.message)}[/] • "
+                    f"[{status_color}]{status_badge} {escape(self.chk.auth.message)}[/] • "
                     f"Env var: [cyan]{self.chk.auth.env_var_name}[/]",
                     classes="op-param-desc",
                 )
@@ -174,10 +174,10 @@ class OperationRunnerPage(VerticalScroll):
 
         # 3. Action Buttons Bar
         with Horizontal(id="op_button_bar"):
-            yield Button("▶ Run Request", id="btn_run", variant="success")
-            yield Button("⚡ Dry Run", id="btn_dry", variant="primary")
-            yield Button("📋 cURL", id="btn_curl", variant="default")
-            yield Button("← Back to Operations", id="btn_back", variant="default")
+            yield Button("Run Request", id="btn_run", variant="success")
+            yield Button("Dry Run", id="btn_dry", variant="primary")
+            yield Button("cURL", id="btn_curl", variant="default")
+            yield Button("Back to Operations", id="btn_back", variant="default")
 
         # 4. Live Result / Response Viewer
         with Vertical(id="op_result_card", classes="op-card"):
@@ -237,17 +237,26 @@ class OperationRunnerPage(VerticalScroll):
         )
 
         auth_line = (
-            f"[bold green]🔒 Auth:[/] [green]{escape(chk.auth.message)}[/]"
+            f"[bold green]Auth:[/] [green]{escape(chk.auth.message)}[/]"
             if chk.auth.is_configured
             else (
-                f"[bold yellow]🔒 Auth:[/] [yellow]{escape(chk.auth.message)}[/]"
+                f"[bold yellow]Auth:[/] [yellow]{escape(chk.auth.message)}[/]"
                 if chk.auth.is_required
-                else "[dim]🔓 Public Endpoint • No authentication required[/]"
+                else "[dim]Public Endpoint • No authentication required[/]"
             )
         )
 
+        tier_styles = {
+            "Cached": f"bold {pal.secondary}",
+            "Compressed": f"bold {pal.primary}",
+            "Downloaded": "bold green",
+            "Not Downloaded": f"dim {pal.text_muted}",
+        }
+        tier_style = tier_styles.get(chk.storage_tier, f"dim {pal.text_muted}")
+        tier_badge = f"[dim]Tier:[/] [{tier_style}]{escape(chk.storage_tier)}[/]"
+
         parts = [
-            f"[dim]← Ctrl+← / Esc: Back to Operations[/]  •  [dim]API:[/] [bold {pal.secondary}]{escape(chk.provider)}/{escape(chk.api)}[/]",
+            f"[dim]Back: Ctrl+Left / Esc[/]  •  [dim]API:[/] [bold {pal.secondary}]{escape(chk.provider)}/{escape(chk.api)}[/]  •  {tier_badge}",
             f"[bold {m_color}]{escape(m)}[/]  [bold {pal.text}]{escape(chk.operation_id)}[/]  [dim {pal.text_muted}]{escape(chk.path)}[/]",
             auth_line,
         ]
@@ -348,7 +357,7 @@ class OperationRunnerPage(VerticalScroll):
 
     def set_executing(self, action_name: str = "Executing request...") -> None:
         header = self.query_one("#op_result_header", Static)
-        header.update(f"[bold cyan]⏳ {escape(action_name)}[/]")
+        header.update(f"[bold cyan]{escape(action_name)}[/]")
         body = self.query_one("#op_result_body", Static)
         body.update("")
 
@@ -367,12 +376,12 @@ class OperationRunnerPage(VerticalScroll):
             curl_cmd = res.to_curl()
             if is_curl or "curl" in call_target.lower():
                 header.update(
-                    f"[bold green]✓ cURL Command Generated[/] • [dim]{escape(call_target)}[/]"
+                    f"[bold green]cURL Command Generated[/] • [dim]{escape(call_target)}[/]"
                 )
                 body.update(f"[bold green]cURL Command:[/] {escape(curl_cmd)}")
             else:
                 header.update(
-                    f"[bold green]✓ Dry-Run Prepared[/] • "
+                    f"[bold green]Dry-Run Prepared[/] • "
                     f"Method: [bold {pal.secondary}]{escape(res.method)}[/] • "
                     f"URL: [dim]{escape(res.url)}[/]"
                 )
@@ -393,7 +402,7 @@ class OperationRunnerPage(VerticalScroll):
             dur = duration_ms if duration_ms is not None else getattr(res.metadata, "duration_ms", 0)
             status_color = "green" if status_code < 400 else "red"
             header.update(
-                f"[bold {status_color}]✓ {status_code} OK[/] • "
+                f"[bold {status_color}]{status_code} OK[/] • "
                 f"Latency: [cyan]{dur}ms[/] • "
                 f"Target: [bold {pal.secondary}]{escape(call_target)}[/]"
             )
@@ -403,12 +412,12 @@ class OperationRunnerPage(VerticalScroll):
                 body.update(str(res.data))
         else:
             header.update(
-                f"[bold green]✓ Result[/] • Target: [bold {pal.secondary}]{escape(call_target)}[/]"
+                f"[bold green]Result[/] • Target: [bold {pal.secondary}]{escape(call_target)}[/]"
             )
             body.update(str(res))
 
     def display_error(self, error_msg: str, call_target: str) -> None:
         header = self.query_one("#op_result_header", Static)
-        header.update(f"[bold red]✗ Request Failed[/] • Target: [bold]{escape(call_target)}[/]")
+        header.update(f"[bold red]Request Failed[/] • Target: [bold]{escape(call_target)}[/]")
         body = self.query_one("#op_result_body", Static)
         body.update(f"[red]{escape(error_msg)}[/]")
