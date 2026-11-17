@@ -107,9 +107,10 @@ async def test_main_tui_operations_view_and_inspection():
         assert "ID:" in str(status_text.render())
 
         # Test filtering operations
+        sample_term = app._current_operations[0]["id"][:4]
         input_widget = pilot.app.query_one("#command_input", Input)
         input_widget.focus()
-        input_widget.value = "repo"
+        input_widget.value = sample_term
         await pilot.pause()
         assert table.row_count > 0
 
